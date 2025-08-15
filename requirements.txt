@@ -1,0 +1,18 @@
+# ScriptFlow - Core Dependencies
+Flask==2.3.3
+Flask-Login==0.6.3
+Flask-SQLAlchemy==3.0.5
+APScheduler==3.10.4
+Werkzeug==2.3.7
+SQLAlchemy==2.0.21
+Jinja2==3.1.2
+
+# Development Dependencies
+pytest==7.4.2
+pytest-flask==1.2.0
+black==23.9.1
+flake8==6.1.0
+
+# Production Dependencies
+gunicorn==21.2.0
+python-dotenv==1.0.0
