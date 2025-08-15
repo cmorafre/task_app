@@ -24,6 +24,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
 
+# Python interpreter configuration
+app.config['PYTHON_EXECUTABLE'] = os.environ.get('PYTHON_EXECUTABLE', 'python3')
+app.config['PYTHON_ENV'] = os.environ.get('PYTHON_ENV', None)  # Optional virtual environment path
+
 # Initialize extensions
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -82,7 +86,6 @@ class Execution(db.Model):
     
     # Relationship
     script = db.relationship('Script', backref='executions')
-    
     @property
     def formatted_duration(self):
         if not self.duration_seconds:
@@ -117,6 +120,36 @@ class Execution(db.Model):
             'cancelled': 'danger'
         }
         return colors.get(self.status, 'secondary')
+
+class Settings(db.Model):
+    __tablename__ = 'settings'
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.Text)
+    description = db.Column(db.String(255))
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    @staticmethod
+    def get_value(key, default=None):
+        """Get setting value by key"""
+        setting = Settings.query.filter_by(key=key).first()
+        return setting.value if setting else default
+    
+    @staticmethod
+    def set_value(key, value, description=None, user_id=1):
+        """Set setting value by key"""
+        setting = Settings.query.filter_by(key=key).first()
+        if setting:
+            setting.value = value
+            setting.updated_by = user_id
+            if description:
+                setting.description = description
+        else:
+            setting = Settings(key=key, value=value, description=description, updated_by=user_id)
+            db.session.add(setting)
+        db.session.commit()
+        return setting
 
 # User loader
 @login_manager.user_loader
@@ -329,9 +362,20 @@ def execute_script_background(execution_id, script_path, script_type):
             
             script_dir = os.path.dirname(script_path)
             
-            # Build command with absolute path
+            # Build command with configured Python interpreter
             if script_type == 'py':
-                cmd = ['python3', script_path]
+                # Get Python config from database first, fallback to app config
+                python_exec = Settings.get_value('python_executable', app.config['PYTHON_EXECUTABLE'])
+                python_env = Settings.get_value('python_env', app.config['PYTHON_ENV'])
+                
+                # If virtual environment is specified, use it
+                if python_env:
+                    python_exec = os.path.join(python_env, 'bin', 'python')
+                    if not os.path.exists(python_exec):
+                        # Try Windows path structure
+                        python_exec = os.path.join(python_env, 'Scripts', 'python.exe')
+                
+                cmd = [python_exec, script_path]
             elif script_type == 'bat':
                 if os.name == 'nt':
                     cmd = ['cmd', '/c', script_path]
@@ -437,6 +481,139 @@ def stop_execution_api(execution_id):
 @app.route('/health')
 def health():
     return {'status': 'healthy', 'version': '1.0'}, 200
+
+@app.route('/system/info')
+@login_required  
+def system_info():
+    """System information endpoint"""
+    import sys
+    import shutil
+    
+    python_exec = app.config['PYTHON_EXECUTABLE']
+    python_env = app.config['PYTHON_ENV']
+    
+    # Get actual Python path that would be used
+    if python_env:
+        actual_python = os.path.join(python_env, 'bin', 'python')
+        if not os.path.exists(actual_python):
+            actual_python = os.path.join(python_env, 'Scripts', 'python.exe')
+    else:
+        actual_python = shutil.which(python_exec) or python_exec
+    
+    try:
+        # Test the configured Python
+        import subprocess
+        result = subprocess.run([actual_python, '--version'], capture_output=True, text=True, timeout=5)
+        python_version = result.stdout.strip() if result.returncode == 0 else f"Error: {result.stderr.strip()}"
+    except Exception as e:
+        python_version = f"Error testing Python: {str(e)}"
+    
+    return jsonify({
+        'system': {
+            'current_app_python': sys.executable,
+            'current_app_version': sys.version,
+            'configured_python_executable': python_exec,
+            'configured_python_env': python_env,
+            'resolved_python_path': actual_python,
+            'resolved_python_version': python_version,
+            'platform': sys.platform,
+            'cwd': os.getcwd()
+        },
+        'config': {
+            'upload_folder': app.config['UPLOAD_FOLDER'],
+            'database_uri': app.config['SQLALCHEMY_DATABASE_URI'],
+            'max_content_length': app.config['MAX_CONTENT_LENGTH']
+        }
+    })
+
+@app.route('/settings')
+@login_required
+def settings():
+    """Settings configuration page"""
+    return render_template_string(SETTINGS_TEMPLATE)
+
+@app.route('/settings/python', methods=['GET', 'POST'])
+@login_required
+def python_settings():
+    """Python interpreter settings"""
+    if request.method == 'POST':
+        python_exec = request.form.get('python_executable', '').strip()
+        python_env = request.form.get('python_env', '').strip()
+        
+        if python_exec:
+            Settings.set_value('python_executable', python_exec, 
+                             'Python executable path', current_user.id)
+        
+        if python_env:
+            Settings.set_value('python_env', python_env,
+                             'Python virtual environment path', current_user.id)
+        elif 'python_env' in request.form:  # Empty but present = clear setting
+            Settings.set_value('python_env', '',
+                             'Python virtual environment path', current_user.id)
+        
+        flash('Python settings updated successfully!', 'success')
+        return redirect(url_for('python_settings'))
+    
+    # GET request - show current settings
+    current_python_exec = Settings.get_value('python_executable', app.config['PYTHON_EXECUTABLE'])
+    current_python_env = Settings.get_value('python_env', app.config['PYTHON_ENV']) or ''
+    
+    return render_template_string(PYTHON_SETTINGS_TEMPLATE, 
+                                python_executable=current_python_exec,
+                                python_env=current_python_env)
+
+@app.route('/settings/terminal')
+@login_required  
+def terminal():
+    """Web terminal for package installation"""
+    return render_template_string(TERMINAL_TEMPLATE)
+
+@app.route('/api/terminal/execute', methods=['POST'])
+@login_required
+def terminal_execute():
+    """Execute terminal command"""
+    data = request.get_json()
+    command = data.get('command', '').strip()
+    
+    if not command:
+        return jsonify({'error': 'No command provided'}), 400
+    
+    # Security: Only allow specific safe commands
+    allowed_commands = ['pip', 'python', 'which', 'ls', 'pwd']
+    cmd_parts = command.split()
+    
+    if not cmd_parts or cmd_parts[0] not in allowed_commands:
+        return jsonify({'error': 'Command not allowed'}), 403
+    
+    try:
+        # Get configured Python for pip commands
+        if cmd_parts[0] == 'pip':
+            python_exec = Settings.get_value('python_executable', app.config['PYTHON_EXECUTABLE'])
+            python_env = Settings.get_value('python_env', app.config['PYTHON_ENV'])
+            
+            if python_env:
+                pip_exec = os.path.join(python_env, 'bin', 'pip')
+                if not os.path.exists(pip_exec):
+                    pip_exec = os.path.join(python_env, 'Scripts', 'pip.exe')
+            else:
+                pip_exec = 'pip3'
+            
+            cmd_parts[0] = pip_exec
+        
+        # Execute command
+        result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=30)
+        
+        return jsonify({
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'returncode': result.returncode,
+            'command': ' '.join(cmd_parts)
+        })
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Command timed out'}), 408
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Templates (inline)
 LOGIN_TEMPLATE = '''
@@ -573,6 +750,7 @@ DASHBOARD_TEMPLATE = '''
                 <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                 <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
                 <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
+                <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
                 <div class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
@@ -916,6 +1094,7 @@ UPLOAD_TEMPLATE = '''
                 <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                 <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
                 <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
+                <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
                 <div class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         {{ current_user.username }}
@@ -1221,6 +1400,7 @@ EXECUTION_DETAIL_TEMPLATE = '''
                 <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
                 <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
                 <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
+                <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
                 <div class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         {{ current_user.username }}
@@ -1461,6 +1641,557 @@ EXECUTION_DETAIL_TEMPLATE = '''
                 stopAutoRefresh();
             }
         });
+    </script>
+</body>
+</html>
+'''
+
+SETTINGS_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScriptFlow - Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 76px; }
+        .navbar-brand { font-weight: 600; }
+        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .settings-card { transition: transform 0.2s; }
+        .settings-card:hover { transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
+                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
+                <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right me-2"></i>Logout
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h1><i class="bi bi-gear-fill me-2"></i>Settings</h1>
+                <p class="text-muted">Configure ScriptFlow application settings</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card settings-card h-100">
+                    <div class="card-body text-center">
+                        <i class="bi bi-code-slash text-primary mb-3" style="font-size: 3rem;"></i>
+                        <h5 class="card-title">Python Interpreter</h5>
+                        <p class="card-text">Configure which Python interpreter to use for script execution</p>
+                        <a href="{{ url_for('python_settings') }}" class="btn btn-primary">
+                            <i class="bi bi-gear me-2"></i>Configure Python
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card settings-card h-100">
+                    <div class="card-body text-center">
+                        <i class="bi bi-terminal text-success mb-3" style="font-size: 3rem;"></i>
+                        <h5 class="card-title">Package Manager</h5>
+                        <p class="card-text">Install packages and dependencies using web terminal</p>
+                        <a href="{{ url_for('terminal') }}" class="btn btn-success">
+                            <i class="bi bi-terminal me-2"></i>Open Terminal
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card settings-card h-100">
+                    <div class="card-body text-center">
+                        <i class="bi bi-info-circle text-info mb-3" style="font-size: 3rem;"></i>
+                        <h5 class="card-title">System Information</h5>
+                        <p class="card-text">View current system and Python configuration details</p>
+                        <a href="{{ url_for('system_info') }}" class="btn btn-info">
+                            <i class="bi bi-info-circle me-2"></i>View Info
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+'''
+
+PYTHON_SETTINGS_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScriptFlow - Python Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 76px; }
+        .navbar-brand { font-weight: 600; }
+        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-label { font-weight: 500; }
+        .code-input { font-family: 'Monaco', 'Courier New', monospace; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
+                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
+                <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right me-2"></i>Logout
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ url_for('settings') }}">Settings</a></li>
+                        <li class="breadcrumb-item active">Python Interpreter</li>
+                    </ol>
+                </nav>
+                <h1><i class="bi bi-code-slash me-2"></i>Python Interpreter Settings</h1>
+                <p class="text-muted">Configure which Python interpreter and environment to use for script execution</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="python_executable" class="form-label">
+                                    <i class="bi bi-file-earmark-code me-1"></i>Python Executable
+                                </label>
+                                <input type="text" class="form-control code-input" id="python_executable" 
+                                       name="python_executable" value="{{ python_executable }}"
+                                       placeholder="python3 or /usr/bin/python3">
+                                <div class="form-text">
+                                    Path to Python executable. Use 'python3' for system default or full path like '/usr/bin/python3'
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="python_env" class="form-label">
+                                    <i class="bi bi-folder me-1"></i>Virtual Environment (Optional)
+                                </label>
+                                <input type="text" class="form-control code-input" id="python_env" 
+                                       name="python_env" value="{{ python_env }}"
+                                       placeholder="/path/to/venv or leave empty">
+                                <div class="form-text">
+                                    Path to virtual environment directory. Leave empty to use system Python.
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check-lg me-2"></i>Save Settings
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="testConfiguration()">
+                                    <i class="bi bi-play-circle me-2"></i>Test Configuration
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Examples</h6>
+                    </div>
+                    <div class="card-body">
+                        <h6>System Python:</h6>
+                        <code>python3</code>
+                        <hr>
+                        <h6>Specific Version:</h6>
+                        <code>/usr/bin/python3.9</code>
+                        <hr>
+                        <h6>Anaconda:</h6>
+                        <code>/opt/anaconda3/bin/python</code>
+                        <hr>
+                        <h6>Virtual Environment:</h6>
+                        <code>/home/user/myenv</code>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Test Result</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="test-result">Click "Test Configuration" to verify settings</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function testConfiguration() {
+            const pythonExec = document.getElementById('python_executable').value;
+            const pythonEnv = document.getElementById('python_env').value;
+            const resultDiv = document.getElementById('test-result');
+            
+            resultDiv.innerHTML = '<i class="bi bi-clock-history me-1"></i>Testing configuration...';
+            
+            fetch('/api/terminal/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: 'python --version' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.returncode === 0) {
+                    resultDiv.innerHTML = `
+                        <div class="text-success">
+                            <i class="bi bi-check-circle me-1"></i>Configuration OK<br>
+                            <small>${data.stdout.trim()}</small>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="text-danger">
+                            <i class="bi bi-x-circle me-1"></i>Configuration Error<br>
+                            <small>${data.stderr || data.error}</small>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `
+                    <div class="text-danger">
+                        <i class="bi bi-x-circle me-1"></i>Test Failed<br>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
+'''
+
+TERMINAL_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScriptFlow - Terminal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 76px; }
+        .navbar-brand { font-weight: 600; }
+        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .terminal { 
+            background-color: #1e1e1e; 
+            color: #d4d4d4; 
+            padding: 20px; 
+            border-radius: 8px; 
+            font-family: 'Monaco', 'Courier New', monospace; 
+            font-size: 14px;
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .terminal-input { 
+            background: transparent; 
+            border: none; 
+            color: #d4d4d4; 
+            outline: none; 
+            width: 100%;
+            font-family: inherit;
+        }
+        .terminal-line { margin: 2px 0; }
+        .terminal-prompt { color: #4ec9b0; }
+        .terminal-command { color: #9cdcfe; }
+        .terminal-output { color: #d4d4d4; }
+        .terminal-error { color: #f44747; }
+        .quick-commands { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
+                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
+                <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right me-2"></i>Logout
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ url_for('settings') }}">Settings</a></li>
+                        <li class="breadcrumb-item active">Terminal</li>
+                    </ol>
+                </nav>
+                <h1><i class="bi bi-terminal me-2"></i>Package Manager Terminal</h1>
+                <p class="text-muted">Install packages and manage dependencies for script execution</p>
+            </div>
+        </div>
+
+        <div class="quick-commands">
+            <h5>Quick Commands:</h5>
+            <div class="btn-group flex-wrap" role="group">
+                <button class="btn btn-outline-primary btn-sm" onclick="runCommand('pip list')">
+                    List Packages
+                </button>
+                <button class="btn btn-outline-success btn-sm" onclick="runCommand('pip install speedtest-cli')">
+                    Install speedtest-cli
+                </button>
+                <button class="btn btn-outline-success btn-sm" onclick="runCommand('pip install pandas')">
+                    Install pandas
+                </button>
+                <button class="btn btn-outline-success btn-sm" onclick="runCommand('pip install openpyxl')">
+                    Install openpyxl
+                </button>
+                <button class="btn btn-outline-info btn-sm" onclick="runCommand('which python')">
+                    Which Python
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearTerminal()">
+                    Clear
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="terminal" id="terminal">
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">scriptflow@terminal:~$</span> 
+                        <span class="terminal-output">Web Terminal Ready. Type your commands below.</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-output">Allowed commands: pip, python, which, ls, pwd</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">scriptflow@terminal:~$</span> 
+                        <input type="text" class="terminal-input" id="commandInput" 
+                               placeholder="Type command and press Enter..." autofocus>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <small class="text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                Security Note: Only safe package management and system information commands are allowed.
+            </small>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const terminal = document.getElementById('terminal');
+        const commandInput = document.getElementById('commandInput');
+        
+        commandInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const command = this.value.trim();
+                if (command) {
+                    runCommand(command);
+                    this.value = '';
+                }
+            }
+        });
+
+        function runCommand(command) {
+            // Show command in terminal
+            addTerminalLine('terminal-prompt', `scriptflow@terminal:~$ ${command}`);
+            addTerminalLine('terminal-output', 'Executing...');
+            
+            fetch('/api/terminal/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: command })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove "Executing..." line
+                terminal.removeChild(terminal.lastElementChild);
+                
+                if (data.error) {
+                    addTerminalLine('terminal-error', `Error: ${data.error}`);
+                } else {
+                    if (data.stdout) {
+                        data.stdout.split('\\n').forEach(line => {
+                            if (line.trim()) addTerminalLine('terminal-output', line);
+                        });
+                    }
+                    if (data.stderr) {
+                        data.stderr.split('\\n').forEach(line => {
+                            if (line.trim()) addTerminalLine('terminal-error', line);
+                        });
+                    }
+                    if (!data.stdout && !data.stderr) {
+                        addTerminalLine('terminal-output', 'Command completed successfully.');
+                    }
+                }
+                
+                // Add new prompt
+                addPrompt();
+            })
+            .catch(error => {
+                // Remove "Executing..." line
+                terminal.removeChild(terminal.lastElementChild);
+                addTerminalLine('terminal-error', `Network error: ${error.message}`);
+                addPrompt();
+            });
+        }
+
+        function addTerminalLine(className, text) {
+            const line = document.createElement('div');
+            line.className = `terminal-line ${className}`;
+            line.textContent = text;
+            
+            // Insert before the input line
+            const inputLine = terminal.lastElementChild;
+            terminal.insertBefore(line, inputLine);
+            
+            // Scroll to bottom
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function addPrompt() {
+            // Remove current input line
+            terminal.removeChild(terminal.lastElementChild);
+            
+            // Add new prompt with input
+            const promptLine = document.createElement('div');
+            promptLine.className = 'terminal-line';
+            promptLine.innerHTML = `
+                <span class="terminal-prompt">scriptflow@terminal:~$</span> 
+                <input type="text" class="terminal-input" placeholder="Type command..." autofocus>
+            `;
+            
+            terminal.appendChild(promptLine);
+            
+            // Focus new input
+            const newInput = promptLine.querySelector('.terminal-input');
+            newInput.focus();
+            
+            // Add event listener
+            newInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const command = this.value.trim();
+                    if (command) {
+                        runCommand(command);
+                    }
+                }
+            });
+            
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function clearTerminal() {
+            terminal.innerHTML = `
+                <div class="terminal-line">
+                    <span class="terminal-prompt">scriptflow@terminal:~$</span> 
+                    <span class="terminal-output">Terminal cleared.</span>
+                </div>
+                <div class="terminal-line">
+                    <span class="terminal-prompt">scriptflow@terminal:~$</span> 
+                    <input type="text" class="terminal-input" placeholder="Type command..." autofocus>
+                </div>
+            `;
+            
+            // Re-add event listener to new input
+            const newInput = terminal.querySelector('.terminal-input');
+            newInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const command = this.value.trim();
+                    if (command) {
+                        runCommand(command);
+                    }
+                }
+            });
+            newInput.focus();
+        }
     </script>
 </body>
 </html>
