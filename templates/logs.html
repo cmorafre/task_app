@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Execution Logs - ScriptFlow{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-success { color: #27AE60; }
+    .status-warning { color: #F39C12; }
+    .status-danger { color: #E74C3C; }
+    
+    /* Rotating icon animation for running status */
+    .rotating-icon {
+        animation: rotate 2s linear infinite;
+    }
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Auto-refresh indicator */
+    .auto-refresh-indicator {
+        position: fixed;
+        top: 85px;
+        right: 20px;
+        z-index: 1000;
+    }
+    
+    /* Improved badge styles */
+    .badge {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.7rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <!-- Auto-refresh indicator -->
+    <div class="auto-refresh-indicator">
+        <div class="alert alert-info alert-sm py-1 px-2 mb-0" id="refreshIndicator" style="display: none;">
+            <i class="bi bi-arrow-clockwise me-1"></i>
+            <small>Auto-refreshing...</small>
+        </div>
+    </div>
+        <div class="row mb-4">
+            <div class="col">
+                <h1><i class="bi bi-clock-history me-2"></i>Execution Logs</h1>
+                <p class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Page refreshes automatically every 10 seconds when scripts are running
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-0">
+                {% if executions.items %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Script</th>
+                                    <th>Status</th>
+                                    <th>Started</th>
+                                    <th>Duration</th>
+                                    <th>Exit Code</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for execution in executions.items %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ execution.script.name if execution.script else 'Unknown' }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if execution.status == 'running' %}
+                                            <span class="badge bg-warning d-flex align-items-center gap-1">
+                                                <i class="bi bi-arrow-clockwise rotating-icon"></i>
+                                                Running
+                                            </span>
+                                        {% elif execution.status == 'completed' %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle me-1"></i>
+                                                Completed
+                                            </span>
+                                        {% elif execution.status == 'failed' %}
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-x-circle me-1"></i>
+                                                Failed
+                                            </span>
+                                        {% elif execution.status == 'pending' %}
+                                            <span class="badge bg-secondary">
+                                                <i class="bi bi-clock me-1"></i>
+                                                Pending
+                                            </span>
+                                        {% elif execution.status == 'timeout' %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-stopwatch me-1"></i>
+                                                Timeout
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                {{ execution.status.title() }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ execution.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ execution.formatted_duration }}</td>
+                                    <td>
+                                        {% if execution.exit_code is not none %}
+                                            <span class="badge bg-{{ 'success' if execution.exit_code == 0 else 'danger' }}">
+                                                {{ execution.exit_code }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('view_execution', execution_id=execution.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye me-1"></i>View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if executions.pages > 1 %}
+                    <div class="card-footer">
+                        <nav>
+                            <ul class="pagination justify-content-center mb-0">
+                                {% if executions.has_prev %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('logs', page=executions.prev_num) }}">Previous</a>
+                                    </li>
+                                {% endif %}
+                                
+                                {% for page_num in executions.iter_pages() %}
+                                    {% if page_num %}
+                                        {% if page_num != executions.page %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ url_for('logs', page=page_num) }}">{{ page_num }}</a>
+                                            </li>
+                                        {% else %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ page_num }}</span>
+                                            </li>
+                                        {% endif %}
+                                    {% else %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if executions.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('logs', page=executions.next_num) }}">Next</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <div class="p-5 text-center">
+                        <i class="bi bi-clock-history text-muted" style="font-size: 4rem;"></i>
+                        <h3 class="mt-3 text-muted">No Executions Yet</h3>
+                        <p class="text-muted">Execute some scripts to see their logs here.</p>
+                        <a href="{{ url_for('scripts') }}" class="btn btn-primary">
+                            <i class="bi bi-file-code me-2"></i>Go to Scripts
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+        let refreshInterval = null;
+        
+        function hasRunningExecutions() {
+            // Check if there are any running executions on the page
+            return document.querySelector('.badge.bg-warning') !== null;
+        }
+        
+        function startAutoRefresh() {
+            if (refreshInterval) return; // Already running
+            
+            refreshInterval = setInterval(function() {
+                if (hasRunningExecutions()) {
+                    showRefreshIndicator();
+                    // Reload the page to get updated status
+                    window.location.reload();
+                } else {
+                    stopAutoRefresh();
+                }
+            }, 10000); // Refresh every 10 seconds
+        }
+        
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            hideRefreshIndicator();
+        }
+        
+        function showRefreshIndicator() {
+            const indicator = document.getElementById('refreshIndicator');
+            if (indicator) {
+                indicator.style.display = 'block';
+                // Hide after 2 seconds
+                setTimeout(() => {
+                    hideRefreshIndicator();
+                }, 2000);
+            }
+        }
+        
+        function hideRefreshIndicator() {
+            const indicator = document.getElementById('refreshIndicator');
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }
+        
+        // Start auto-refresh when page loads if there are running executions
+        document.addEventListener('DOMContentLoaded', function() {
+            if (hasRunningExecutions()) {
+                startAutoRefresh();
+                
+                // Show a toast to inform the user
+                const toastHtml = `
+                    <div class="toast align-items-center text-white bg-info border-0" role="alert" style="position: fixed; top: 100px; right: 20px; z-index: 1100;">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                <i class="bi bi-info-circle me-2"></i>
+                                Auto-refresh enabled for running scripts
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', toastHtml);
+                
+                // Show the toast
+                const toastElement = document.querySelector('.toast');
+                const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
+                toast.show();
+                
+                // Remove the toast element after it's hidden
+                toastElement.addEventListener('hidden.bs.toast', function() {
+                    toastElement.remove();
+                });
+            }
+        });
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            stopAutoRefresh();
+        });
+</script>
+{% endblock %}

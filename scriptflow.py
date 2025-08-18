@@ -6,7 +6,7 @@ Sistema de automação de scripts Python e Batch
 
 import os
 import socket
-from flask import Flask, render_template_string, request, flash, redirect, url_for, jsonify
+from flask import Flask, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -15,6 +15,10 @@ from datetime import datetime, timedelta
 import subprocess
 import tempfile
 import threading
+import json
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+import atexit
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -35,6 +39,14 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access ScriptFlow.'
 
+# Initialize scheduler
+jobstores = {
+    'default': SQLAlchemyJobStore(url=app.config['SQLALCHEMY_DATABASE_URI'])
+}
+scheduler = BackgroundScheduler(jobstores=jobstores)
+scheduler.start()
+atexit.register(lambda: scheduler.shutdown())
+
 # Models
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -42,14 +54,14 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
     last_login = db.Column(db.DateTime)
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
     def update_last_login(self):
-        self.last_login = datetime.utcnow()
+        self.last_login = datetime.now()
         db.session.commit()
 
 class Script(db.Model):
@@ -61,8 +73,8 @@ class Script(db.Model):
     file_path = db.Column(db.String(500), nullable=False)
     script_type = db.Column(db.String(10), nullable=False)  # 'py' or 'bat'
     file_size = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     is_active = db.Column(db.Boolean, default=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
@@ -73,7 +85,7 @@ class Script(db.Model):
 class Execution(db.Model):
     __tablename__ = 'executions'
     id = db.Column(db.Integer, primary_key=True)
-    started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    started_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
     completed_at = db.Column(db.DateTime)
     status = db.Column(db.String(20), default='pending', nullable=False)  # pending, running, completed, failed, timeout
     exit_code = db.Column(db.Integer)
@@ -101,7 +113,7 @@ class Execution(db.Model):
     def status_icon(self):
         icons = {
             'pending': '⏳',
-            'running': '<i class="bi bi-arrow-clockwise"></i>',  # Ícone Bootstrap que pode ser animado
+            'running': '🔄',  # Emoji simples que funciona bem
             'completed': '✅',
             'failed': '❌',
             'timeout': '⏰',
@@ -127,7 +139,7 @@ class Settings(db.Model):
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text)
     description = db.Column(db.String(255))
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     updated_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     @staticmethod
@@ -150,6 +162,194 @@ class Settings(db.Model):
             db.session.add(setting)
         db.session.commit()
         return setting
+
+class Schedule(db.Model):
+    __tablename__ = 'schedules'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    frequency = db.Column(db.String(20), nullable=False)  # daily, weekly, monthly, custom
+    time_config = db.Column(db.Text)  # JSON string with time configuration
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    next_run_time = db.Column(db.DateTime)
+    last_execution_id = db.Column(db.Integer, db.ForeignKey('executions.id'))
+    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Relationships
+    script = db.relationship('Script', backref='schedules')
+    user = db.relationship('User', backref='schedules')
+    last_execution = db.relationship('Execution', foreign_keys=[last_execution_id])
+    
+    @property
+    def time_config_json(self):
+        """Parse time configuration JSON"""
+        if self.time_config:
+            try:
+                return json.loads(self.time_config)
+            except:
+                return {}
+        return {}
+    
+    @property
+    def next_run_display(self):
+        """Human readable next run time"""
+        if not self.next_run_time:
+            return "Not scheduled"
+        
+        now = datetime.now()  # Use local time instead of UTC
+        delta = self.next_run_time - now
+        
+        if delta.total_seconds() < 0:
+            return "Overdue"
+        elif delta.total_seconds() < 3600:  # Less than 1 hour
+            minutes = int(delta.total_seconds() / 60)
+            return f"in {minutes}m"
+        elif delta.total_seconds() < 86400:  # Less than 1 day
+            hours = int(delta.total_seconds() / 3600)
+            minutes = int((delta.total_seconds() % 3600) / 60)
+            return f"in {hours}h {minutes}m"
+        else:
+            days = int(delta.total_seconds() / 86400)
+            return f"in {days} days"
+    
+    @property
+    def frequency_display(self):
+        """Human readable frequency"""
+        if self.frequency == 'daily':
+            config = self.time_config_json
+            if config.get('time'):
+                return f"Daily at {config['time']}"
+            return "Daily"
+        elif self.frequency == 'weekly':
+            config = self.time_config_json
+            days = config.get('days', ['monday'])
+            time = config.get('time', '09:00')
+            if len(days) == 1:
+                return f"{days[0].capitalize()} at {time}"
+            return f"Weekly ({len(days)} days) at {time}"
+        elif self.frequency == 'monthly':
+            config = self.time_config_json
+            day = config.get('day', 1)
+            time = config.get('time', '09:00')
+            return f"Monthly (day {day}) at {time}"
+        elif self.frequency == 'custom':
+            return "Custom schedule"
+        return self.frequency.capitalize()
+    
+    def calculate_next_run(self):
+        """Calculate next run time based on frequency and configuration"""
+        config = self.time_config_json
+        now = datetime.now()  # Use local time instead of UTC
+        original_now = now  # Keep original time for comparison
+        
+        # Check if we have a start date
+        start_date_str = config.get('start_date')
+        minimum_date = None
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                # If start date is in the future, use it as the minimum date
+                if start_date.date() > now.date():
+                    minimum_date = start_date.date()
+            except ValueError:
+                pass
+        
+        if self.frequency == 'daily':
+            time_str = config.get('time', '09:00')
+            hour, minute = map(int, time_str.split(':'))
+            
+            # Start with today's time
+            next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # If time has passed today and no minimum date, schedule for tomorrow
+            if next_run <= original_now and not minimum_date:
+                next_run += timedelta(days=1)
+            # If we have a minimum date, ensure we don't schedule before it
+            elif minimum_date and next_run.date() < minimum_date:
+                next_run = datetime.combine(minimum_date, next_run.time())
+                
+        elif self.frequency == 'weekly':
+            time_str = config.get('time', '09:00')
+            hour, minute = map(int, time_str.split(':'))
+            days = config.get('days', ['monday'])
+            
+            # Map day names to numbers (0=Monday)
+            day_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 
+                      'friday': 4, 'saturday': 5, 'sunday': 6}
+            
+            # Find next occurrence
+            current_weekday = original_now.weekday()
+            target_days = [day_map[day.lower()] for day in days if day.lower() in day_map]
+            target_days.sort()
+            
+            next_run = None
+            for target_day in target_days:
+                days_ahead = target_day - current_weekday
+                if days_ahead < 0:  # Target day already happened this week
+                    days_ahead += 7
+                elif days_ahead == 0:  # Today
+                    candidate = original_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    if candidate > original_now:
+                        next_run = candidate
+                        break
+                    else:
+                        days_ahead = 7
+                
+                candidate = original_now.replace(hour=hour, minute=minute, second=0, microsecond=0) + timedelta(days=days_ahead)
+                if not next_run or candidate < next_run:
+                    next_run = candidate
+            
+            # Apply minimum date if specified
+            if minimum_date and next_run and next_run.date() < minimum_date:
+                # Find the first occurrence on or after minimum_date
+                while next_run.date() < minimum_date:
+                    next_run += timedelta(days=7)
+                    
+        elif self.frequency == 'monthly':
+            time_str = config.get('time', '09:00')
+            hour, minute = map(int, time_str.split(':'))
+            target_day = config.get('day', 1)
+            
+            # Try current month first
+            try:
+                next_run = original_now.replace(day=target_day, hour=hour, minute=minute, second=0, microsecond=0)
+                if next_run <= original_now:
+                    raise ValueError("Time passed")
+            except (ValueError, OverflowError):
+                # Move to next month
+                if original_now.month == 12:
+                    next_year = original_now.year + 1
+                    next_month = 1
+                else:
+                    next_year = original_now.year
+                    next_month = original_now.month + 1
+                
+                next_run = original_now.replace(year=next_year, month=next_month, day=min(target_day, 28), 
+                                     hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # Apply minimum date if specified
+            if minimum_date and next_run.date() < minimum_date:
+                # Find the first monthly occurrence on or after minimum_date
+                while next_run.date() < minimum_date:
+                    if next_run.month == 12:
+                        next_run = next_run.replace(year=next_run.year + 1, month=1)
+                    else:
+                        next_run = next_run.replace(month=next_run.month + 1)
+        else:
+            # Default to daily at 9 AM for unknown frequencies
+            next_run = original_now.replace(hour=9, minute=0, second=0, microsecond=0)
+            if next_run <= original_now:
+                next_run += timedelta(days=1)
+            
+            # Apply minimum date if specified
+            if minimum_date and next_run.date() < minimum_date:
+                next_run = datetime.combine(minimum_date, next_run.time())
+        
+        self.next_run_time = next_run
+        return next_run
 
 # User loader
 @login_manager.user_loader
@@ -178,7 +378,7 @@ def login():
         
         if not username or not password:
             flash('Please enter both username and password.', 'error')
-            return render_template_string(LOGIN_TEMPLATE)
+            return render_template('login.html')
         
         user = User.query.filter_by(username=username).first()
         
@@ -190,7 +390,7 @@ def login():
         else:
             flash('Invalid username or password.', 'error')
     
-    return render_template_string(LOGIN_TEMPLATE)
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required
@@ -215,12 +415,12 @@ def dashboard():
     total_scripts = len(user_scripts)
     executions_24h = Execution.query.filter(
         Execution.user_id == current_user.id,
-        Execution.started_at >= datetime.utcnow() - timedelta(days=1)
+        Execution.started_at >= datetime.now() - timedelta(days=1)
     ).count()
     
     successful_24h = Execution.query.filter(
         Execution.user_id == current_user.id,
-        Execution.started_at >= datetime.utcnow() - timedelta(days=1),
+        Execution.started_at >= datetime.now() - timedelta(days=1),
         Execution.status == 'completed',
         Execution.exit_code == 0
     ).count()
@@ -234,7 +434,7 @@ def dashboard():
         'running_count': len(running_processes)
     }
     
-    return render_template_string(DASHBOARD_TEMPLATE,
+    return render_template('dashboard.html',
                          scripts=user_scripts,
                          recent_executions=recent_executions,
                          stats=stats)
@@ -244,7 +444,7 @@ def dashboard():
 def scripts():
     user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True)\
         .order_by(Script.updated_at.desc()).all()
-    return render_template_string(SCRIPTS_TEMPLATE, scripts=user_scripts)
+    return render_template('scripts.html', scripts=user_scripts)
 
 @app.route('/scripts/upload', methods=['GET', 'POST'])
 @login_required
@@ -314,7 +514,7 @@ def upload_script():
             flash(f'Error uploading script: {str(e)}', 'error')
             return redirect(request.url)
     
-    return render_template_string(UPLOAD_TEMPLATE)
+    return render_template('upload.html')
 
 @app.route('/scripts/<int:script_id>/execute', methods=['POST'])
 @login_required
@@ -353,7 +553,7 @@ def execute_script_background(execution_id, script_path, script_type):
         try:
             # Update status to running
             execution.status = 'running'
-            execution.started_at = datetime.utcnow()
+            execution.started_at = datetime.now()
             db.session.commit()
             
             # Make sure script_path is absolute
@@ -384,7 +584,7 @@ def execute_script_background(execution_id, script_path, script_type):
             else:
                 raise Exception(f"Unsupported script type: {script_type}")
             
-            start_time = datetime.utcnow()
+            start_time = datetime.now()
             result = subprocess.run(
                 cmd,
                 cwd=script_dir,  # Execute in the directory where script is located
@@ -392,7 +592,7 @@ def execute_script_background(execution_id, script_path, script_type):
                 text=True,
                 timeout=300  # 5 minutes timeout
             )
-            end_time = datetime.utcnow()
+            end_time = datetime.now()
             
             # Update execution record
             execution.completed_at = end_time
@@ -405,18 +605,110 @@ def execute_script_background(execution_id, script_path, script_type):
             db.session.commit()
     
         except subprocess.TimeoutExpired:
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now()
             execution.status = 'timeout'
             execution.stderr = "Script execution timed out (5 minutes)"
             execution.duration_seconds = 300
             db.session.commit()
         
         except Exception as e:
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now()
             execution.status = 'failed'
             execution.stderr = str(e)
             execution.exit_code = -1
             db.session.commit()
+
+@app.route('/scripts/<int:script_id>/view')
+@login_required
+def view_script(script_id):
+    """View script content"""
+    script = Script.query.filter_by(id=script_id, user_id=current_user.id, is_active=True).first_or_404()
+    
+    try:
+        with open(script.file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        flash(f'Error reading script file: {str(e)}', 'error')
+        return redirect(url_for('scripts'))
+    
+    return render_template('view_script.html', script=script, content=content)
+
+@app.route('/scripts/<int:script_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_script(script_id):
+    """Edit script content and metadata"""
+    script = Script.query.filter_by(id=script_id, user_id=current_user.id, is_active=True).first_or_404()
+    
+    if request.method == 'POST':
+        # Update metadata
+        script.name = request.form.get('name', '').strip()
+        script.description = request.form.get('description', '').strip()
+        
+        # Update file content
+        new_content = request.form.get('content', '')
+        try:
+            with open(script.file_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            
+            script.updated_at = datetime.now()
+            db.session.commit()
+            flash(f'Script "{script.name}" updated successfully!', 'success')
+            return redirect(url_for('scripts'))
+        except Exception as e:
+            flash(f'Error saving script: {str(e)}', 'error')
+    
+    # GET request - load current content
+    try:
+        with open(script.file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        flash(f'Error reading script file: {str(e)}', 'error')
+        return redirect(url_for('scripts'))
+    
+    return render_template('edit_script.html', script=script, content=content)
+
+@app.route('/scripts/<int:script_id>/download')
+@login_required
+def download_script(script_id):
+    """Download script file"""
+    from flask import send_file
+    script = Script.query.filter_by(id=script_id, user_id=current_user.id, is_active=True).first_or_404()
+    
+    if not script.file_exists:
+        flash('Script file not found.', 'error')
+        return redirect(url_for('scripts'))
+    
+    try:
+        return send_file(
+            script.file_path,
+            as_attachment=True,
+            download_name=f"{script.name}.{script.script_type}"
+        )
+    except Exception as e:
+        flash(f'Error downloading script: {str(e)}', 'error')
+        return redirect(url_for('scripts'))
+
+@app.route('/scripts/<int:script_id>/delete', methods=['POST'])
+@login_required
+def delete_script(script_id):
+    """Delete script and its file"""
+    script = Script.query.filter_by(id=script_id, user_id=current_user.id, is_active=True).first_or_404()
+    
+    try:
+        # Delete physical file
+        if script.file_exists:
+            os.remove(script.file_path)
+        
+        # Mark as inactive instead of deleting from database
+        script.is_active = False
+        script.updated_at = datetime.now()
+        db.session.commit()
+        
+        flash(f'Script "{script.name}" deleted successfully!', 'success')
+    except Exception as e:
+        flash(f'Error deleting script: {str(e)}', 'error')
+    
+    return redirect(url_for('scripts'))
 
 @app.route('/logs')
 @login_required
@@ -426,13 +718,13 @@ def logs():
         .order_by(Execution.started_at.desc())\
         .paginate(page=page, per_page=20, error_out=False)
     
-    return render_template_string(LOGS_TEMPLATE, executions=executions)
+    return render_template('logs.html', executions=executions)
 
 @app.route('/logs/<int:execution_id>')
 @login_required
 def view_execution(execution_id):
     execution = Execution.query.filter_by(id=execution_id, user_id=current_user.id).first_or_404()
-    return render_template_string(EXECUTION_DETAIL_TEMPLATE, execution=execution)
+    return render_template('execution_detail.html', execution=execution)
 
 @app.route('/api/execution/<int:execution_id>/status')
 @login_required
@@ -466,7 +758,7 @@ def stop_execution_api(execution_id):
     
     # Update execution status to cancelled
     execution.status = 'cancelled'
-    execution.completed_at = datetime.utcnow()
+    execution.completed_at = datetime.now()
     execution.stderr = (execution.stderr or '') + '\n[CANCELLED] Execution was stopped by user'
     execution.duration_seconds = (execution.completed_at - execution.started_at).total_seconds() if execution.started_at else 0
     
@@ -530,7 +822,40 @@ def system_info():
 @login_required
 def settings():
     """Settings configuration page"""
-    return render_template_string(SETTINGS_TEMPLATE)
+    return render_template('settings.html')
+
+def detect_python_interpreters():
+    """Detect available Python interpreters on the system"""
+    interpreters = []
+    common_paths = [
+        'python3', 'python', 'python3.9', 'python3.10', 'python3.11', 'python3.12',
+        '/usr/bin/python3', '/usr/bin/python', '/usr/local/bin/python3',
+        '/opt/homebrew/bin/python3', '/System/Library/Frameworks/Python.framework/Versions/Current/bin/python3'
+    ]
+    
+    for path in common_paths:
+        try:
+            result = subprocess.run([path, '--version'], 
+                                  capture_output=True, text=True, timeout=3)
+            if result.returncode == 0:
+                version = result.stdout.strip() or result.stderr.strip()
+                interpreters.append({
+                    'path': path,
+                    'version': version,
+                    'display': f"{path} ({version})"
+                })
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            continue
+    
+    # Remove duplicates based on version
+    seen_versions = set()
+    unique_interpreters = []
+    for interp in interpreters:
+        if interp['version'] not in seen_versions:
+            seen_versions.add(interp['version'])
+            unique_interpreters.append(interp)
+    
+    return unique_interpreters
 
 @app.route('/settings/python', methods=['GET', 'POST'])
 @login_required
@@ -554,19 +879,298 @@ def python_settings():
         flash('Python settings updated successfully!', 'success')
         return redirect(url_for('python_settings'))
     
-    # GET request - show current settings
+    # GET request - show current settings and available interpreters
     current_python_exec = Settings.get_value('python_executable', app.config['PYTHON_EXECUTABLE'])
     current_python_env = Settings.get_value('python_env', app.config['PYTHON_ENV']) or ''
+    available_interpreters = detect_python_interpreters()
     
-    return render_template_string(PYTHON_SETTINGS_TEMPLATE, 
+    return render_template('python_settings.html', 
                                 python_executable=current_python_exec,
-                                python_env=current_python_env)
+                                python_env=current_python_env,
+                                available_interpreters=available_interpreters)
+
+@app.route('/schedules')
+@login_required
+def schedules():
+    """Schedule management page"""
+    user_schedules = Schedule.query.filter_by(user_id=current_user.id)\
+        .order_by(Schedule.next_run_time.asc()).all()
+    
+    # Get stats
+    active_schedules = sum(1 for s in user_schedules if s.is_active)
+    disabled_schedules = len(user_schedules) - active_schedules
+    
+    # Next run time
+    next_schedule = next((s for s in user_schedules if s.is_active and s.next_run_time), None)
+    next_run_display = next_schedule.next_run_display if next_schedule else "No upcoming runs"
+    
+    stats = {
+        'active': active_schedules,
+        'disabled': disabled_schedules,
+        'next_run': next_run_display,
+        'avg_per_day': 0  # TODO: Calculate based on execution history
+    }
+    
+    return render_template('schedules.html', schedules=user_schedules, stats=stats)
+
+@app.route('/schedules/create', methods=['GET', 'POST'])
+@login_required
+def create_schedule():
+    """Create new schedule"""
+    if request.method == 'POST':
+        script_id = request.form.get('script_id', type=int)
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        frequency = request.form.get('frequency', '')
+        time = request.form.get('time', '09:00')
+        start_date = request.form.get('start_date', '')
+        is_active = bool(request.form.get('is_active'))
+        
+        if not script_id or not name or not frequency:
+            flash('Please fill all required fields.', 'error')
+            return redirect(request.url)
+        
+        # Verify script belongs to user
+        script = Script.query.filter_by(id=script_id, user_id=current_user.id, is_active=True).first()
+        if not script:
+            flash('Invalid script selected.', 'error')
+            return redirect(request.url)
+        
+        # Build time configuration
+        time_config = {'time': time}
+        
+        # Add start date if specified
+        if start_date:
+            time_config['start_date'] = start_date
+        
+        if frequency == 'weekly':
+            days = request.form.getlist('days')
+            if not days:
+                days = ['monday']
+            time_config['days'] = days
+        elif frequency == 'monthly':
+            day = request.form.get('day', 1, type=int)
+            time_config['day'] = max(1, min(28, day))
+        
+        # Create schedule
+        schedule = Schedule(
+            name=name,
+            description=description,
+            frequency=frequency,
+            time_config=json.dumps(time_config),
+            is_active=is_active,
+            script_id=script_id,
+            user_id=current_user.id
+        )
+        
+        # Calculate next run
+        schedule.calculate_next_run()
+        
+        db.session.add(schedule)
+        db.session.commit()
+        
+        # Add to APScheduler if active
+        if is_active:
+            add_schedule_to_scheduler(schedule)
+        
+        flash(f'Schedule "{name}" created successfully!', 'success')
+        return redirect(url_for('schedules'))
+    
+    # GET request - show form
+    user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True)\
+        .order_by(Script.name).all()
+    return render_template('create_schedule.html', scripts=user_scripts)
+
+@app.route('/schedules/<int:schedule_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_schedule(schedule_id):
+    """Edit existing schedule"""
+    schedule = Schedule.query.filter_by(id=schedule_id, user_id=current_user.id).first_or_404()
+    
+    if request.method == 'POST':
+        schedule.name = request.form.get('name', '').strip()
+        schedule.description = request.form.get('description', '').strip()
+        schedule.frequency = request.form.get('frequency', '')
+        time = request.form.get('time', '09:00')
+        was_active = schedule.is_active
+        schedule.is_active = bool(request.form.get('is_active'))
+        
+        # Build time configuration
+        time_config = {'time': time}
+        
+        if schedule.frequency == 'weekly':
+            days = request.form.getlist('days')
+            if not days:
+                days = ['monday']
+            time_config['days'] = days
+        elif schedule.frequency == 'monthly':
+            day = request.form.get('day', 1, type=int)
+            time_config['day'] = max(1, min(28, day))
+        
+        schedule.time_config = json.dumps(time_config)
+        schedule.updated_at = datetime.now()
+        
+        # Recalculate next run
+        schedule.calculate_next_run()
+        
+        # Update APScheduler
+        if was_active:
+            remove_schedule_from_scheduler(schedule.id)
+        
+        if schedule.is_active:
+            add_schedule_to_scheduler(schedule)
+        
+        db.session.commit()
+        
+        flash(f'Schedule "{schedule.name}" updated successfully!', 'success')
+        return redirect(url_for('schedules'))
+    
+    # GET request - show form
+    user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True)\
+        .order_by(Script.name).all()
+    return render_template('edit_schedule.html', schedule=schedule, scripts=user_scripts)
+
+@app.route('/schedules/<int:schedule_id>/toggle', methods=['POST'])
+@login_required
+def toggle_schedule(schedule_id):
+    """Toggle schedule active status"""
+    schedule = Schedule.query.filter_by(id=schedule_id, user_id=current_user.id).first_or_404()
+    
+    was_active = schedule.is_active
+    schedule.is_active = not schedule.is_active
+    schedule.updated_at = datetime.now()
+    
+    # Update APScheduler
+    if was_active:
+        remove_schedule_from_scheduler(schedule.id)
+    
+    if schedule.is_active:
+        schedule.calculate_next_run()
+        add_schedule_to_scheduler(schedule)
+    
+    db.session.commit()
+    
+    status = "activated" if schedule.is_active else "deactivated"
+    flash(f'Schedule "{schedule.name}" {status} successfully!', 'success')
+    
+    return redirect(url_for('schedules'))
+
+@app.route('/schedules/<int:schedule_id>/delete', methods=['POST'])
+@login_required
+def delete_schedule(schedule_id):
+    """Delete schedule"""
+    schedule = Schedule.query.filter_by(id=schedule_id, user_id=current_user.id).first_or_404()
+    
+    # Remove from APScheduler
+    remove_schedule_from_scheduler(schedule.id)
+    
+    schedule_name = schedule.name
+    db.session.delete(schedule)
+    db.session.commit()
+    
+    flash(f'Schedule "{schedule_name}" deleted successfully!', 'success')
+    return redirect(url_for('schedules'))
+
+@app.route('/schedules/<int:schedule_id>/run', methods=['POST'])
+@login_required
+def run_schedule_now(schedule_id):
+    """Run a schedule immediately"""
+    schedule = Schedule.query.filter_by(id=schedule_id, user_id=current_user.id).first_or_404()
+    
+    if not schedule.script.file_exists:
+        flash('Script file not found.', 'error')
+        return redirect(url_for('schedules'))
+    
+    # Create execution record
+    execution = Execution(
+        script_id=schedule.script_id,
+        user_id=current_user.id,
+        status='pending',
+        trigger_type='scheduled'
+    )
+    db.session.add(execution)
+    db.session.commit()
+    
+    # Start execution in background
+    thread = threading.Thread(target=execute_script_background, args=(execution.id, schedule.script.file_path, schedule.script.script_type))
+    thread.daemon = True
+    thread.start()
+    
+    flash(f'Schedule "{schedule.name}" executed manually!', 'success')
+    return redirect(url_for('logs'))
+
+def add_schedule_to_scheduler(schedule):
+    """Add schedule to APScheduler"""
+    job_id = f"schedule_{schedule.id}"
+    
+    # Remove existing job if exists
+    try:
+        scheduler.remove_job(job_id)
+    except:
+        pass
+    
+    if not schedule.is_active or not schedule.next_run_time:
+        return
+    
+    # Add new job
+    scheduler.add_job(
+        id=job_id,
+        func=execute_scheduled_script,
+        args=[schedule.id],
+        trigger='date',
+        run_date=schedule.next_run_time,
+        replace_existing=True
+    )
+
+def remove_schedule_from_scheduler(schedule_id):
+    """Remove schedule from APScheduler"""
+    job_id = f"schedule_{schedule_id}"
+    try:
+        scheduler.remove_job(job_id)
+    except:
+        pass
+
+def execute_scheduled_script(schedule_id):
+    """Execute script from schedule (called by APScheduler)"""
+    with app.app_context():
+        schedule = Schedule.query.get(schedule_id)
+        if not schedule or not schedule.is_active:
+            return
+        
+        script = schedule.script
+        if not script or not script.file_exists:
+            return
+        
+        # Create execution record
+        execution = Execution(
+            script_id=script.id,
+            user_id=schedule.user_id,
+            status='pending',
+            trigger_type='scheduled'
+        )
+        db.session.add(execution)
+        db.session.commit()
+        
+        # Update schedule's last execution
+        schedule.last_execution_id = execution.id
+        
+        # Calculate and schedule next run
+        schedule.calculate_next_run()
+        db.session.commit()
+        
+        # Add next job to scheduler
+        add_schedule_to_scheduler(schedule)
+        
+        # Execute script in background
+        thread = threading.Thread(target=execute_script_background, args=(execution.id, script.file_path, script.script_type))
+        thread.daemon = True
+        thread.start()
 
 @app.route('/settings/terminal')
 @login_required  
 def terminal():
     """Web terminal for package installation"""
-    return render_template_string(TERMINAL_TEMPLATE)
+    return render_template('terminal.html')
 
 @app.route('/api/terminal/execute', methods=['POST'])
 @login_required
@@ -615,1587 +1219,7 @@ def terminal_execute():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Templates (inline)
-LOGIN_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Login</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { 
-            background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%); 
-            min-height: 100vh; 
-            display: flex; 
-            align-items: center; 
-        }
-        .login-card { 
-            background: white; 
-            border-radius: 12px; 
-            padding: 2rem; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
-            width: 100%; 
-            max-width: 400px; 
-        }
-        .login-header { 
-            text-align: center; 
-            margin-bottom: 2rem; 
-        }
-        .login-header h1 { 
-            color: #2C3E50; 
-            font-weight: 700; 
-            margin-bottom: 0.5rem; 
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-6">
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
-                
-                <div class="login-card">
-                    <div class="login-header">
-                        <h1>🔧 ScriptFlow</h1>
-                        <p class="text-muted">Automation Made Simple</p>
-                    </div>
-                    
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label for="username" class="form-label">Username</label>
-                            <input type="text" class="form-control" id="username" name="username" required autofocus>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
-                        </div>
-                        
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="remember" name="remember">
-                            <label class="form-check-label" for="remember">Remember me</label>
-                        </div>
-                        
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-lg">Sign In</button>
-                        </div>
-                    </form>
-                    
-                    <div class="text-center mt-4">
-                        <small class="text-muted">Default: admin / admin123</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-'''
-
-DASHBOARD_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .stats-card { 
-            background: white; 
-            border-radius: 8px; 
-            padding: 1.5rem; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-            border-left: 4px solid #2C3E50; 
-        }
-        .stats-number { 
-            font-size: 2rem; 
-            font-weight: 700; 
-            color: #2C3E50; 
-            margin: 0; 
-        }
-        .stats-label { 
-            color: #7F8C8D; 
-            font-size: 0.875rem; 
-            margin: 0; 
-        }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .status-success { color: #27AE60; }
-        .status-warning { color: #F39C12; }
-        .status-danger { color: #E74C3C; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                            <i class="bi bi-box-arrow-right me-2"></i>Logout
-                        </a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="row mb-4">
-            <div class="col">
-                <h1><i class="bi bi-speedometer2 me-2"></i>Dashboard</h1>
-                <p class="text-muted">Welcome back, {{ current_user.username }}!</p>
-            </div>
-            <div class="col-auto">
-                <a href="{{ url_for('upload_script') }}" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>Upload Script
-                </a>
-            </div>
-        </div>
-
-        <!-- Stats -->
-        <div class="row mb-4">
-            <div class="col-md-3 mb-3">
-                <div class="stats-card">
-                    <p class="stats-number">{{ stats.total_scripts }}</p>
-                    <p class="stats-label">Total Scripts</p>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="stats-card">
-                    <p class="stats-number">{{ stats.executions_24h }}</p>
-                    <p class="stats-label">Executions (24h)</p>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="stats-card">
-                    <p class="stats-number">{{ stats.success_rate_24h }}%</p>
-                    <p class="stats-label">Success Rate</p>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="stats-card">
-                    <p class="stats-number">{{ stats.running_count }}</p>
-                    <p class="stats-label">Running Now</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Navigation -->
-        <div class="row mb-4">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <a href="{{ url_for('upload_script') }}" class="btn btn-outline-primary w-100">
-                                    <i class="bi bi-upload me-2"></i>Upload Script
-                                </a>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <a href="{{ url_for('scripts') }}" class="btn btn-outline-success w-100">
-                                    <i class="bi bi-list me-2"></i>Manage Scripts
-                                </a>
-                            </div>
-                            <div class="col-md-6">
-                                <a href="{{ url_for('logs') }}" class="btn btn-outline-info w-100">
-                                    <i class="bi bi-clock-history me-2"></i>View Logs
-                                </a>
-                            </div>
-                            <div class="col-md-6">
-                                <a href="#" class="btn btn-outline-secondary w-100">
-                                    <i class="bi bi-calendar me-2"></i>Schedules (Soon)
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Scripts -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between">
-                        <h5 class="mb-0"><i class="bi bi-file-code me-2"></i>Scripts</h5>
-                        <a href="{{ url_for('scripts') }}" class="btn btn-sm btn-outline-light">View All</a>
-                    </div>
-                    <div class="card-body p-0">
-                        {% if scripts %}
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th>Name</th>
-                                            <th>Type</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for script in scripts[:5] %}
-                                        <tr>
-                                            <td>{{ script.name }}</td>
-                                            <td><span class="badge bg-secondary">{{ script.script_type.upper() }}</span></td>
-                                            <td>
-                                                <form method="POST" action="{{ url_for('execute_script', script_id=script.id) }}" class="d-inline">
-                                                    <button type="submit" class="btn btn-sm btn-success" title="Execute">
-                                                        <i class="bi bi-play"></i>
-                                                    </button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <div class="p-4 text-center">
-                                <i class="bi bi-file-code text-muted" style="font-size: 3rem;"></i>
-                                <p class="text-muted mt-2">No scripts yet</p>
-                                <a href="{{ url_for('upload_script') }}" class="btn btn-primary">Upload First Script</a>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between">
-                        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Executions</h5>
-                        <a href="{{ url_for('logs') }}" class="btn btn-sm btn-outline-light">View All</a>
-                    </div>
-                    <div class="card-body p-0">
-                        {% if recent_executions %}
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th>Script</th>
-                                            <th>Status</th>
-                                            <th>Duration</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for execution in recent_executions %}
-                                        <tr>
-                                            <td>
-                                                <a href="{{ url_for('view_execution', execution_id=execution.id) }}">
-                                                    {{ execution.script.name if execution.script else 'Unknown' }}
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <span class="status-{{ execution.status_color }}">
-                                                    {{ execution.status_icon }} {{ execution.status.title() }}
-                                                </span>
-                                            </td>
-                                            <td>{{ execution.formatted_duration }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <div class="p-4 text-center">
-                                <i class="bi bi-clock-history text-muted" style="font-size: 3rem;"></i>
-                                <p class="text-muted mt-2">No executions yet</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-'''
-
-SCRIPTS_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Scripts</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link active" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        {{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="row mb-4">
-            <div class="col">
-                <h1><i class="bi bi-file-code me-2"></i>Scripts</h1>
-            </div>
-            <div class="col-auto">
-                <a href="{{ url_for('upload_script') }}" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>Upload Script
-                </a>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body p-0">
-                {% if scripts %}
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Type</th>
-                                    <th>Size</th>
-                                    <th>Created</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for script in scripts %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ script.name }}</strong>
-                                        {% if script.description %}
-                                            <br><small class="text-muted">{{ script.description[:50] }}{% if script.description|length > 50 %}...{% endif %}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td><span class="badge bg-secondary">{{ script.script_type.upper() }}</span></td>
-                                    <td>{{ (script.file_size / 1024)|round(1) }} KB</td>
-                                    <td>{{ script.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                                    <td>
-                                        <form method="POST" action="{{ url_for('execute_script', script_id=script.id) }}" class="d-inline">
-                                            <button type="submit" class="btn btn-sm btn-success" title="Execute">
-                                                <i class="bi bi-play"></i>
-                                            </button>
-                                        </form>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="p-5 text-center">
-                        <i class="bi bi-file-code text-muted" style="font-size: 4rem;"></i>
-                        <h3 class="mt-3 text-muted">No Scripts Yet</h3>
-                        <p class="text-muted">Upload your first Python or Batch script to get started with automation.</p>
-                        <a href="{{ url_for('upload_script') }}" class="btn btn-primary btn-lg">
-                            <i class="bi bi-upload me-2"></i>Upload First Script
-                        </a>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-'''
-
-UPLOAD_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Upload Script</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        {{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0"><i class="bi bi-upload me-2"></i>Upload New Script</h4>
-                    </div>
-                    <div class="card-body">
-                        <form method="POST" enctype="multipart/form-data">
-                            <div class="mb-3">
-                                <label for="file" class="form-label">Script File</label>
-                                <input type="file" class="form-control" id="file" name="file" accept=".py,.bat" required>
-                                <div class="form-text">Supported: .py (Python) and .bat (Batch) files. Max size: 10MB</div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="name" class="form-label">Script Name</label>
-                                <input type="text" class="form-control" id="name" name="name" placeholder="Enter a descriptive name">
-                                <div class="form-text">Leave blank to use filename</div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="description" class="form-label">Description (Optional)</label>
-                                <textarea class="form-control" id="description" name="description" rows="3" placeholder="Describe what this script does..."></textarea>
-                            </div>
-
-                            <div class="d-flex justify-content-between">
-                                <a href="{{ url_for('scripts') }}" class="btn btn-secondary">
-                                    <i class="bi bi-arrow-left me-2"></i>Back to Scripts
-                                </a>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-upload me-2"></i>Upload Script
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-'''
-
-LOGS_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Execution Logs</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .status-success { color: #27AE60; }
-        .status-warning { color: #F39C12; }
-        .status-danger { color: #E74C3C; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link active" href="{{ url_for('logs') }}">Logs</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        {{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        <div class="row mb-4">
-            <div class="col">
-                <h1><i class="bi bi-clock-history me-2"></i>Execution Logs</h1>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body p-0">
-                {% if executions.items %}
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Script</th>
-                                    <th>Status</th>
-                                    <th>Started</th>
-                                    <th>Duration</th>
-                                    <th>Exit Code</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for execution in executions.items %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ execution.script.name if execution.script else 'Unknown' }}</strong>
-                                    </td>
-                                    <td>
-                                        <span class="status-{{ execution.status_color }}">
-                                            {{ execution.status_icon }} {{ execution.status.title() }}
-                                        </span>
-                                    </td>
-                                    <td>{{ execution.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                                    <td>{{ execution.formatted_duration }}</td>
-                                    <td>
-                                        {% if execution.exit_code is not none %}
-                                            <span class="badge bg-{{ 'success' if execution.exit_code == 0 else 'danger' }}">
-                                                {{ execution.exit_code }}
-                                            </span>
-                                        {% else %}
-                                            <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <a href="{{ url_for('view_execution', execution_id=execution.id) }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-eye me-1"></i>View
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Pagination -->
-                    {% if executions.pages > 1 %}
-                    <div class="card-footer">
-                        <nav>
-                            <ul class="pagination justify-content-center mb-0">
-                                {% if executions.has_prev %}
-                                    <li class="page-item">
-                                        <a class="page-link" href="{{ url_for('logs', page=executions.prev_num) }}">Previous</a>
-                                    </li>
-                                {% endif %}
-                                
-                                {% for page_num in executions.iter_pages() %}
-                                    {% if page_num %}
-                                        {% if page_num != executions.page %}
-                                            <li class="page-item">
-                                                <a class="page-link" href="{{ url_for('logs', page=page_num) }}">{{ page_num }}</a>
-                                            </li>
-                                        {% else %}
-                                            <li class="page-item active">
-                                                <span class="page-link">{{ page_num }}</span>
-                                            </li>
-                                        {% endif %}
-                                    {% else %}
-                                        <li class="page-item disabled">
-                                            <span class="page-link">...</span>
-                                        </li>
-                                    {% endif %}
-                                {% endfor %}
-                                
-                                {% if executions.has_next %}
-                                    <li class="page-item">
-                                        <a class="page-link" href="{{ url_for('logs', page=executions.next_num) }}">Next</a>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </nav>
-                    </div>
-                    {% endif %}
-                {% else %}
-                    <div class="p-5 text-center">
-                        <i class="bi bi-clock-history text-muted" style="font-size: 4rem;"></i>
-                        <h3 class="mt-3 text-muted">No Executions Yet</h3>
-                        <p class="text-muted">Execute some scripts to see their logs here.</p>
-                        <a href="{{ url_for('scripts') }}" class="btn btn-primary">
-                            <i class="bi bi-file-code me-2"></i>Go to Scripts
-                        </a>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-'''
-
-EXECUTION_DETAIL_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Execution Details</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .log-output { 
-            background-color: #2d3748; 
-            color: #e2e8f0; 
-            padding: 1rem; 
-            border-radius: 6px; 
-            font-family: Monaco, monospace; 
-            font-size: 0.875rem; 
-            max-height: 400px; 
-            overflow-y: auto; 
-            white-space: pre-wrap; 
-        }
-        .status-success { color: #27AE60; }
-        .status-warning { color: #F39C12; }
-        .status-danger { color: #E74C3C; }
-        .status-secondary { color: #6c757d; }
-        
-        /* Animação para status running */
-        .status-running {
-            color: #007bff;
-            animation: pulse 1.5s infinite;
-        }
-        
-        .status-running .bi-arrow-clockwise {
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        .executing-banner {
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            color: white;
-            padding: 10px;
-            text-align: center;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            animation: pulse 2s infinite;
-        }
-        
-        .refresh-indicator {
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            background: #28a745;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            z-index: 1000;
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        {{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Indicador de refresh -->
-    <div class="refresh-indicator" id="refreshIndicator">
-        <i class="bi bi-arrow-clockwise me-1"></i>Auto-refreshing...
-    </div>
-
-    <main class="container mt-4">
-        <!-- Banner de execução ativa -->
-        {% if execution.status in ['pending', 'running'] %}
-        <div class="executing-banner">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>
-                        <i class="bi bi-play-circle-fill me-2"></i>
-                        {% if execution.status == 'pending' %}
-                            Script is starting...
-                        {% else %}
-                            Script is running...
-                        {% endif %}
-                    </strong>
-                    <small class="d-block mt-1">This page will refresh automatically every 3 seconds</small>
-                </div>
-                <button 
-                    class="btn btn-danger btn-sm" 
-                    id="stopExecutionBtn"
-                    onclick="stopExecution()"
-                    title="Stop this execution">
-                    <i class="bi bi-stop-circle-fill me-1"></i>Stop
-                </button>
-            </div>
-        </div>
-        {% endif %}
-
-        <div class="row mb-4">
-            <div class="col">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb">
-                        <li class="breadcrumb-item"><a href="{{ url_for('logs') }}">Logs</a></li>
-                        <li class="breadcrumb-item active">Execution #{{ execution.id }}</li>
-                    </ol>
-                </nav>
-                <h1><i class="bi bi-file-play me-2"></i>Execution Details</h1>
-            </div>
-        </div>
-
-        <!-- Execution Info -->
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">{{ execution.script.name if execution.script else 'Unknown Script' }}</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p><strong>Status:</strong> 
-                            <span class="status-{{ execution.status_color }}">
-                                {{ execution.status_icon }} {{ execution.status.title() }}
-                            </span>
-                        </p>
-                        <p><strong>Started:</strong> {{ execution.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
-                        {% if execution.completed_at %}
-                            <p><strong>Completed:</strong> {{ execution.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
-                        {% endif %}
-                        <p><strong>Duration:</strong> <span data-duration>{{ execution.formatted_duration }}</span></p>
-                    </div>
-                    <div class="col-md-6">
-                        {% if execution.exit_code is not none %}
-                            <p><strong>Exit Code:</strong> 
-                                <span class="badge bg-{{ 'success' if execution.exit_code == 0 else 'danger' }}">
-                                    {{ execution.exit_code }}
-                                </span>
-                            </p>
-                        {% endif %}
-                        {% if execution.script %}
-                            <p><strong>Script Type:</strong> {{ execution.script.script_type.upper() }}</p>
-                            <p><strong>Script Size:</strong> {{ (execution.script.file_size / 1024)|round(1) }} KB</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Output -->
-        {% if execution.stdout %}
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Standard Output</h5>
-                </div>
-                <div class="card-body">
-                    <div class="log-output">{{ execution.stdout }}</div>
-                </div>
-            </div>
-        {% endif %}
-
-        {% if execution.stderr %}
-            <div class="card mb-4">
-                <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Error Output</h5>
-                </div>
-                <div class="card-body">
-                    <div class="log-output">{{ execution.stderr }}</div>
-                </div>
-            </div>
-        {% endif %}
-
-        {% if not execution.stdout and not execution.stderr %}
-            <div class="card">
-                <div class="card-body text-center">
-                    <i class="bi bi-info-circle text-muted" style="font-size: 3rem;"></i>
-                    <h5 class="mt-3 text-muted">No Output</h5>
-                    <p class="text-muted">This execution produced no output.</p>
-                </div>
-            </div>
-        {% endif %}
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Auto-refresh para execuções em andamento
-        const executionId = {{ execution.id }};
-        let isRunning = {{ 'true' if execution.status in ['pending', 'running'] else 'false' }};
-        let refreshInterval;
-        
-        function showRefreshIndicator() {
-            document.getElementById('refreshIndicator').style.display = 'block';
-        }
-        
-        function hideRefreshIndicator() {
-            document.getElementById('refreshIndicator').style.display = 'none';
-        }
-        
-        function updateExecutionStatus() {
-            fetch(`/api/execution/${executionId}/status`)
-                .then(response => response.json())
-                .then(data => {
-                    // Atualizar elementos da página sem recarregar completamente
-                    if (data.is_running !== isRunning) {
-                        // Status mudou, recarregar página para mostrar resultados
-                        location.reload();
-                        return;
-                    }
-                    
-                    // Atualizar duração se ainda está rodando
-                    if (data.is_running && data.duration) {
-                        const durationElements = document.querySelectorAll('[data-duration]');
-                        durationElements.forEach(el => {
-                            el.textContent = data.duration;
-                        });
-                    }
-                })
-                .catch(error => {
-                    console.error('Erro ao verificar status:', error);
-                    // Em caso de erro, tentar recarregar a página
-                    setTimeout(() => location.reload(), 5000);
-                });
-        }
-        
-        function startAutoRefresh() {
-            if (isRunning) {
-                showRefreshIndicator();
-                // Verificar status via AJAX a cada 2 segundos
-                refreshInterval = setInterval(updateExecutionStatus, 2000);
-                
-                // Fallback: recarregar página completamente a cada 15 segundos
-                setTimeout(() => {
-                    if (isRunning) {
-                        location.reload();
-                    }
-                }, 15000);
-            }
-        }
-        
-        function stopAutoRefresh() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                hideRefreshIndicator();
-            }
-        }
-        
-        function stopExecution() {
-            const btn = document.getElementById('stopExecutionBtn');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="bi bi-clock me-1"></i>Stopping...';
-            }
-            
-            fetch(`/api/execution/${executionId}/stop`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Parar auto-refresh e recarregar página para mostrar status atualizado
-                    stopAutoRefresh();
-                    location.reload();
-                } else {
-                    alert('Erro ao parar execução: ' + data.message);
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-stop-circle-fill me-1"></i>Stop';
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Erro ao parar execução:', error);
-                alert('Erro ao comunicar com servidor');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-stop-circle-fill me-1"></i>Stop';
-                }
-            });
-        }
-        
-        // Iniciar auto-refresh quando página carregar
-        document.addEventListener('DOMContentLoaded', function() {
-            startAutoRefresh();
-            
-            // Parar refresh quando usuário sair da página
-            window.addEventListener('beforeunload', stopAutoRefresh);
-        });
-        
-        // Botão manual de refresh
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
-                stopAutoRefresh();
-            }
-        });
-    </script>
-</body>
-</html>
-'''
-
-SETTINGS_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Settings</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .settings-card { transition: transform 0.2s; }
-        .settings-card:hover { transform: translateY(-2px); }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                            <i class="bi bi-box-arrow-right me-2"></i>Logout
-                        </a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        <div class="row mb-4">
-            <div class="col">
-                <h1><i class="bi bi-gear-fill me-2"></i>Settings</h1>
-                <p class="text-muted">Configure ScriptFlow application settings</p>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-6 mb-4">
-                <div class="card settings-card h-100">
-                    <div class="card-body text-center">
-                        <i class="bi bi-code-slash text-primary mb-3" style="font-size: 3rem;"></i>
-                        <h5 class="card-title">Python Interpreter</h5>
-                        <p class="card-text">Configure which Python interpreter to use for script execution</p>
-                        <a href="{{ url_for('python_settings') }}" class="btn btn-primary">
-                            <i class="bi bi-gear me-2"></i>Configure Python
-                        </a>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 mb-4">
-                <div class="card settings-card h-100">
-                    <div class="card-body text-center">
-                        <i class="bi bi-terminal text-success mb-3" style="font-size: 3rem;"></i>
-                        <h5 class="card-title">Package Manager</h5>
-                        <p class="card-text">Install packages and dependencies using web terminal</p>
-                        <a href="{{ url_for('terminal') }}" class="btn btn-success">
-                            <i class="bi bi-terminal me-2"></i>Open Terminal
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-6 mb-4">
-                <div class="card settings-card h-100">
-                    <div class="card-body text-center">
-                        <i class="bi bi-info-circle text-info mb-3" style="font-size: 3rem;"></i>
-                        <h5 class="card-title">System Information</h5>
-                        <p class="card-text">View current system and Python configuration details</p>
-                        <a href="{{ url_for('system_info') }}" class="btn btn-info">
-                            <i class="bi bi-info-circle me-2"></i>View Info
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-'''
-
-PYTHON_SETTINGS_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Python Settings</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .form-label { font-weight: 500; }
-        .code-input { font-family: 'Monaco', 'Courier New', monospace; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                            <i class="bi bi-box-arrow-right me-2"></i>Logout
-                        </a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="row mb-4">
-            <div class="col">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb">
-                        <li class="breadcrumb-item"><a href="{{ url_for('settings') }}">Settings</a></li>
-                        <li class="breadcrumb-item active">Python Interpreter</li>
-                    </ol>
-                </nav>
-                <h1><i class="bi bi-code-slash me-2"></i>Python Interpreter Settings</h1>
-                <p class="text-muted">Configure which Python interpreter and environment to use for script execution</p>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-lg-8">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Configuration</h5>
-                    </div>
-                    <div class="card-body">
-                        <form method="POST">
-                            <div class="mb-3">
-                                <label for="python_executable" class="form-label">
-                                    <i class="bi bi-file-earmark-code me-1"></i>Python Executable
-                                </label>
-                                <input type="text" class="form-control code-input" id="python_executable" 
-                                       name="python_executable" value="{{ python_executable }}"
-                                       placeholder="python3 or /usr/bin/python3">
-                                <div class="form-text">
-                                    Path to Python executable. Use 'python3' for system default or full path like '/usr/bin/python3'
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="python_env" class="form-label">
-                                    <i class="bi bi-folder me-1"></i>Virtual Environment (Optional)
-                                </label>
-                                <input type="text" class="form-control code-input" id="python_env" 
-                                       name="python_env" value="{{ python_env }}"
-                                       placeholder="/path/to/venv or leave empty">
-                                <div class="form-text">
-                                    Path to virtual environment directory. Leave empty to use system Python.
-                                </div>
-                            </div>
-
-                            <div class="d-flex gap-2">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-check-lg me-2"></i>Save Settings
-                                </button>
-                                <button type="button" class="btn btn-secondary" onclick="testConfiguration()">
-                                    <i class="bi bi-play-circle me-2"></i>Test Configuration
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Examples</h6>
-                    </div>
-                    <div class="card-body">
-                        <h6>System Python:</h6>
-                        <code>python3</code>
-                        <hr>
-                        <h6>Specific Version:</h6>
-                        <code>/usr/bin/python3.9</code>
-                        <hr>
-                        <h6>Anaconda:</h6>
-                        <code>/opt/anaconda3/bin/python</code>
-                        <hr>
-                        <h6>Virtual Environment:</h6>
-                        <code>/home/user/myenv</code>
-                    </div>
-                </div>
-
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Test Result</h6>
-                    </div>
-                    <div class="card-body">
-                        <div id="test-result">Click "Test Configuration" to verify settings</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function testConfiguration() {
-            const pythonExec = document.getElementById('python_executable').value;
-            const pythonEnv = document.getElementById('python_env').value;
-            const resultDiv = document.getElementById('test-result');
-            
-            resultDiv.innerHTML = '<i class="bi bi-clock-history me-1"></i>Testing configuration...';
-            
-            fetch('/api/terminal/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: 'python --version' })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.returncode === 0) {
-                    resultDiv.innerHTML = `
-                        <div class="text-success">
-                            <i class="bi bi-check-circle me-1"></i>Configuration OK<br>
-                            <small>${data.stdout.trim()}</small>
-                        </div>
-                    `;
-                } else {
-                    resultDiv.innerHTML = `
-                        <div class="text-danger">
-                            <i class="bi bi-x-circle me-1"></i>Configuration Error<br>
-                            <small>${data.stderr || data.error}</small>
-                        </div>
-                    `;
-                }
-            })
-            .catch(error => {
-                resultDiv.innerHTML = `
-                    <div class="text-danger">
-                        <i class="bi bi-x-circle me-1"></i>Test Failed<br>
-                        <small>${error.message}</small>
-                    </div>
-                `;
-            });
-        }
-    </script>
-</body>
-</html>
-'''
-
-TERMINAL_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScriptFlow - Terminal</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 76px; }
-        .navbar-brand { font-weight: 600; }
-        .card { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .terminal { 
-            background-color: #1e1e1e; 
-            color: #d4d4d4; 
-            padding: 20px; 
-            border-radius: 8px; 
-            font-family: 'Monaco', 'Courier New', monospace; 
-            font-size: 14px;
-            min-height: 400px;
-            max-height: 600px;
-            overflow-y: auto;
-        }
-        .terminal-input { 
-            background: transparent; 
-            border: none; 
-            color: #d4d4d4; 
-            outline: none; 
-            width: 100%;
-            font-family: inherit;
-        }
-        .terminal-line { margin: 2px 0; }
-        .terminal-prompt { color: #4ec9b0; }
-        .terminal-command { color: #9cdcfe; }
-        .terminal-output { color: #d4d4d4; }
-        .terminal-error { color: #f44747; }
-        .quick-commands { margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-gear-fill me-2"></i>ScriptFlow
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                            <i class="bi bi-box-arrow-right me-2"></i>Logout
-                        </a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container mt-4">
-        <div class="row mb-4">
-            <div class="col">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb">
-                        <li class="breadcrumb-item"><a href="{{ url_for('settings') }}">Settings</a></li>
-                        <li class="breadcrumb-item active">Terminal</li>
-                    </ol>
-                </nav>
-                <h1><i class="bi bi-terminal me-2"></i>Package Manager Terminal</h1>
-                <p class="text-muted">Install packages and manage dependencies for script execution</p>
-            </div>
-        </div>
-
-        <div class="quick-commands">
-            <h5>Quick Commands:</h5>
-            <div class="btn-group flex-wrap" role="group">
-                <button class="btn btn-outline-primary btn-sm" onclick="runCommand('pip list')">
-                    List Packages
-                </button>
-                <button class="btn btn-outline-success btn-sm" onclick="runCommand('pip install speedtest-cli')">
-                    Install speedtest-cli
-                </button>
-                <button class="btn btn-outline-success btn-sm" onclick="runCommand('pip install pandas')">
-                    Install pandas
-                </button>
-                <button class="btn btn-outline-success btn-sm" onclick="runCommand('pip install openpyxl')">
-                    Install openpyxl
-                </button>
-                <button class="btn btn-outline-info btn-sm" onclick="runCommand('which python')">
-                    Which Python
-                </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="clearTerminal()">
-                    Clear
-                </button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body p-0">
-                <div class="terminal" id="terminal">
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">scriptflow@terminal:~$</span> 
-                        <span class="terminal-output">Web Terminal Ready. Type your commands below.</span>
-                    </div>
-                    <div class="terminal-line">
-                        <span class="terminal-output">Allowed commands: pip, python, which, ls, pwd</span>
-                    </div>
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">scriptflow@terminal:~$</span> 
-                        <input type="text" class="terminal-input" id="commandInput" 
-                               placeholder="Type command and press Enter..." autofocus>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="mt-3">
-            <small class="text-muted">
-                <i class="bi bi-info-circle me-1"></i>
-                Security Note: Only safe package management and system information commands are allowed.
-            </small>
-        </div>
-    </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const terminal = document.getElementById('terminal');
-        const commandInput = document.getElementById('commandInput');
-        
-        commandInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                const command = this.value.trim();
-                if (command) {
-                    runCommand(command);
-                    this.value = '';
-                }
-            }
-        });
-
-        function runCommand(command) {
-            // Show command in terminal
-            addTerminalLine('terminal-prompt', `scriptflow@terminal:~$ ${command}`);
-            addTerminalLine('terminal-output', 'Executing...');
-            
-            fetch('/api/terminal/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: command })
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Remove "Executing..." line
-                terminal.removeChild(terminal.lastElementChild);
-                
-                if (data.error) {
-                    addTerminalLine('terminal-error', `Error: ${data.error}`);
-                } else {
-                    if (data.stdout) {
-                        data.stdout.split('\\n').forEach(line => {
-                            if (line.trim()) addTerminalLine('terminal-output', line);
-                        });
-                    }
-                    if (data.stderr) {
-                        data.stderr.split('\\n').forEach(line => {
-                            if (line.trim()) addTerminalLine('terminal-error', line);
-                        });
-                    }
-                    if (!data.stdout && !data.stderr) {
-                        addTerminalLine('terminal-output', 'Command completed successfully.');
-                    }
-                }
-                
-                // Add new prompt
-                addPrompt();
-            })
-            .catch(error => {
-                // Remove "Executing..." line
-                terminal.removeChild(terminal.lastElementChild);
-                addTerminalLine('terminal-error', `Network error: ${error.message}`);
-                addPrompt();
-            });
-        }
-
-        function addTerminalLine(className, text) {
-            const line = document.createElement('div');
-            line.className = `terminal-line ${className}`;
-            line.textContent = text;
-            
-            // Insert before the input line
-            const inputLine = terminal.lastElementChild;
-            terminal.insertBefore(line, inputLine);
-            
-            // Scroll to bottom
-            terminal.scrollTop = terminal.scrollHeight;
-        }
-
-        function addPrompt() {
-            // Remove current input line
-            terminal.removeChild(terminal.lastElementChild);
-            
-            // Add new prompt with input
-            const promptLine = document.createElement('div');
-            promptLine.className = 'terminal-line';
-            promptLine.innerHTML = `
-                <span class="terminal-prompt">scriptflow@terminal:~$</span> 
-                <input type="text" class="terminal-input" placeholder="Type command..." autofocus>
-            `;
-            
-            terminal.appendChild(promptLine);
-            
-            // Focus new input
-            const newInput = promptLine.querySelector('.terminal-input');
-            newInput.focus();
-            
-            // Add event listener
-            newInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    const command = this.value.trim();
-                    if (command) {
-                        runCommand(command);
-                    }
-                }
-            });
-            
-            terminal.scrollTop = terminal.scrollHeight;
-        }
-
-        function clearTerminal() {
-            terminal.innerHTML = `
-                <div class="terminal-line">
-                    <span class="terminal-prompt">scriptflow@terminal:~$</span> 
-                    <span class="terminal-output">Terminal cleared.</span>
-                </div>
-                <div class="terminal-line">
-                    <span class="terminal-prompt">scriptflow@terminal:~$</span> 
-                    <input type="text" class="terminal-input" placeholder="Type command..." autofocus>
-                </div>
-            `;
-            
-            // Re-add event listener to new input
-            const newInput = terminal.querySelector('.terminal-input');
-            newInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    const command = this.value.trim();
-                    if (command) {
-                        runCommand(command);
-                    }
-                }
-            });
-            newInput.focus();
-        }
-    </script>
-</body>
-</html>
-'''
+# Templates removed - now using separate .html files
 
 def find_free_port(start_port=8000):
     """Find a free port starting from start_port"""
@@ -2226,6 +1250,13 @@ if __name__ == '__main__':
             db.session.add(admin_user)
             db.session.commit()
             print("✅ Created default admin user: admin/admin123")
+        
+        # Load existing schedules into APScheduler on startup
+        schedules = Schedule.query.filter_by(is_active=True).all()
+        for schedule in schedules:
+            if schedule.next_run_time:
+                add_schedule_to_scheduler(schedule)
+        print(f"✅ Loaded {len(schedules)} active schedules into scheduler")
     
     # Find free port and start
     port = find_free_port()
