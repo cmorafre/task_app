@@ -15,6 +15,23 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
 }
 
+/* PADRÃO GLOBAL: Botões sempre com border-radius consistente */
+.btn, .btn-sm, .btn-lg, .btn-group .btn, .btn-outline-primary, .btn-outline-secondary {
+    border-radius: 6px !important;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+/* PADRÃO GLOBAL: Cards e elementos com cantos arredondados */
+.card, .modal-content, .badge, .alert {
+    border-radius: 8px !important;
+}
+
+/* PADRÃO GLOBAL: Inputs e form elements */
+.form-control, .form-select {
+    border-radius: 6px !important;
+}
+
 /* Login Page Styles */
 body.login-page { 
     background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%); 
@@ -71,9 +88,30 @@ body.login-page {
 .status-warning { color: #F39C12; }
 .status-danger { color: #E74C3C; }
 
+/* Enhanced Running Status */
+.status-running {
+    background: linear-gradient(45deg, #ff6b00, #ff8c00) !important;
+    color: white !important;
+    animation: pulse 1.5s infinite;
+    border: none !important;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(255, 107, 0, 0.3);
+}
+
+.badge.bg-warning {
+    background-color: #ff6b00 !important;
+    color: #fff !important;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+}
+
 /* Rotating Animation for Running Status */
-.rotating { 
-    animation: spin 2s linear infinite; 
+.rotating, .rotating-icon { 
+    animation: spin 1.5s linear infinite; 
 }
 
 @keyframes spin {

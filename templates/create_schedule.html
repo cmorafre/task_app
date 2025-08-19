@@ -5,34 +5,78 @@
 {% block extra_css %}
 <style>
     /* Script search dropdown styles */
-    .dropdown-menu {
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    .script-search-container {
+        position: relative;
     }
     
-    .dropdown-item.script-option {
+    .script-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+    }
+    
+    .script-dropdown.show {
+        display: block;
+    }
+    
+    .script-option {
         cursor: pointer;
         padding: 0.75rem 1rem;
         border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.2s ease;
     }
     
-    .dropdown-item.script-option:last-child {
+    .script-option:last-child {
         border-bottom: none;
     }
     
-    .dropdown-item.script-option:hover {
+    .script-option:hover {
         background-color: #f8f9fa;
     }
     
-    .dropdown-item.script-option:active {
+    .script-option:active {
         background-color: #e9ecef;
+    }
+    
+    .script-option.filtered-out {
+        display: none !important;
     }
     
     /* Quick start buttons */
     .btn-outline-secondary.btn-sm {
         font-size: 0.75rem;
         padding: 0.25rem 0.5rem;
+    }
+    
+    /* Search input highlight */
+    .form-control:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    /* Success feedback when script is selected */
+    .form-control.is-valid {
+        border-color: #198754;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%23198754' d='m2.3 6.73.94-.94L4.15 7.1l.94-.94L6.7 7.7l-.94.94-1.61-1.61-.94.94z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right calc(0.375em + 0.1875rem) center;
+        background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+    }
+    
+    /* Empty state styling */
+    .empty-state {
+        font-style: italic;
+        color: #6c757d !important;
+        background-color: #f8f9fa;
     }
 </style>
 {% endblock %}
@@ -68,27 +112,20 @@
                                     <div class="col-md-6">
                                         <div class="mb-3">
                                             <label for="script_id" class="form-label">Script *</label>
-                                            <div class="position-relative">
+                                            <div class="script-search-container">
                                                 <input type="text" class="form-control" id="script_search" 
                                                        placeholder="Type to search scripts..." 
                                                        autocomplete="off">
-                                                <select class="form-select" id="script_id" name="script_id" required style="display: none;">
-                                                    <option value="">Select a script...</option>
+                                                <input type="hidden" id="script_id" name="script_id" required>
+                                                <div id="script_dropdown" class="script-dropdown">
                                                     {% for script in scripts %}
-                                                    <option value="{{ script.id }}" 
-                                                            data-name="{{ script.name.lower() }}"
-                                                            data-type="{{ script.script_type.upper() }}">
-                                                        [{{ script.script_type.upper() }}] {{ script.name }}
-                                                    </option>
-                                                    {% endfor %}
-                                                </select>
-                                                <div id="script_dropdown" class="dropdown-menu w-100" style="max-height: 200px; overflow-y: auto;">
-                                                    {% for script in scripts %}
-                                                    <div class="dropdown-item script-option" data-value="{{ script.id }}">
+                                                    <div class="script-option" data-value="{{ script.id }}"
+                                                         data-name="{{ script.name.lower() }}"
+                                                         data-type="{{ script.script_type.lower() }}">
                                                         <span class="badge bg-info me-2">{{ script.script_type.upper() }}</span>
-                                                        {{ script.name }}
+                                                        <strong>{{ script.name }}</strong>
                                                         {% if script.description %}
-                                                        <br><small class="text-muted">{{ script.description[:50] }}{% if script.description|length > 50 %}...{% endif %}</small>
+                                                        <br><small class="text-muted">{{ script.description[:80] }}{% if script.description|length > 80 %}...{% endif %}</small>
                                                         {% endif %}
                                                     </div>
                                                     {% endfor %}
@@ -304,88 +341,153 @@ document.addEventListener('change', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('script_search');
     const dropdown = document.getElementById('script_dropdown');
-    const hiddenSelect = document.getElementById('script_id');
+    const hiddenInput = document.getElementById('script_id');
     const options = document.querySelectorAll('.script-option');
     
     let selectedValue = '';
-    let isDropdownOpen = false;
+    let selectedText = '';
     
-    // Show dropdown on focus
+    // Show all scripts on focus
     searchInput.addEventListener('focus', function() {
+        showDropdown();
+        if (!this.value) {
+            resetFilter();
+        }
+    });
+    
+    // Filter scripts as user types
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        
+        // Clear selection if user is typing
+        if (this.value !== selectedText) {
+            selectedValue = '';
+            hiddenInput.value = '';
+        }
+        
+        filterOptions(query);
         showDropdown();
     });
     
-    // Filter options on input
-    searchInput.addEventListener('input', function() {
-        const query = this.value.toLowerCase();
+    // Handle script selection
+    options.forEach(option => {
+        option.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const value = this.dataset.value;
+            const scriptName = this.querySelector('strong').textContent;
+            const scriptType = this.dataset.type.toUpperCase();
+            
+            // Update values
+            selectedValue = value;
+            selectedText = `[${scriptType}] ${scriptName}`;
+            
+            searchInput.value = selectedText;
+            hiddenInput.value = value;
+            
+            hideDropdown();
+            updateScheduleName(scriptName);
+            
+            // Visual feedback
+            searchInput.classList.add('is-valid');
+            setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        const container = searchInput.closest('.script-search-container');
+        if (!container.contains(e.target)) {
+            hideDropdown();
+        }
+    });
+    
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', function(e) {
+        const visibleOptions = Array.from(options).filter(opt => !opt.classList.contains('filtered-out'));
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (visibleOptions.length > 0) {
+                visibleOptions[0].focus();
+            }
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+    
+    function filterOptions(query) {
         let hasVisibleOptions = false;
         
         options.forEach(option => {
-            const text = option.textContent.toLowerCase();
-            if (text.includes(query)) {
-                option.style.display = 'block';
+            const name = option.dataset.name;
+            const type = option.dataset.type;
+            const description = option.textContent.toLowerCase();
+            
+            // Search in name, type, and description
+            const matches = !query || 
+                           name.includes(query) || 
+                           type.includes(query) || 
+                           description.includes(query);
+            
+            if (matches) {
+                option.classList.remove('filtered-out');
                 hasVisibleOptions = true;
             } else {
-                option.style.display = 'none';
+                option.classList.add('filtered-out');
             }
         });
         
-        if (hasVisibleOptions) {
-            showDropdown();
-        } else {
-            hideDropdown();
-        }
-    });
+        // Show "no results" message if no options match
+        updateEmptyState(!hasVisibleOptions, query);
+    }
     
-    // Handle option selection
-    options.forEach(option => {
-        option.addEventListener('click', function() {
-            const value = this.dataset.value;
-            const text = this.textContent.trim();
-            
-            searchInput.value = text;
-            hiddenSelect.value = value;
-            selectedValue = value;
-            
-            hideDropdown();
-            updateScheduleName();
+    function resetFilter() {
+        options.forEach(option => {
+            option.classList.remove('filtered-out');
         });
-    });
-    
-    // Hide dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
-            hideDropdown();
-        }
-    });
+        updateEmptyState(false);
+    }
     
     function showDropdown() {
         dropdown.classList.add('show');
-        isDropdownOpen = true;
-        
-        // Reset all options to visible when opening
-        options.forEach(option => {
-            option.style.display = 'block';
-        });
     }
     
     function hideDropdown() {
         dropdown.classList.remove('show');
-        isDropdownOpen = false;
     }
     
-    function updateScheduleName() {
-        const nameField = document.getElementById('name');
-        if (!nameField.value && selectedValue) {
-            const selectedOption = document.querySelector(`option[value="${selectedValue}"]`);
-            if (selectedOption) {
-                const scriptName = selectedOption.textContent.split('] ')[1];
-                const frequency = document.querySelector('input[name="frequency"]:checked').value;
-                const frequencyName = frequency.charAt(0).toUpperCase() + frequency.slice(1);
-                nameField.value = `${frequencyName} ${scriptName}`;
+    function updateEmptyState(isEmpty, query = '') {
+        let emptyMsg = dropdown.querySelector('.empty-state');
+        
+        if (isEmpty) {
+            if (!emptyMsg) {
+                emptyMsg = document.createElement('div');
+                emptyMsg.className = 'empty-state script-option text-center text-muted';
+                emptyMsg.innerHTML = `
+                    <i class="bi bi-search me-2"></i>
+                    No scripts found${query ? ` for "${query}"` : ''}
+                `;
+                dropdown.appendChild(emptyMsg);
             }
+            emptyMsg.style.display = 'block';
+        } else if (emptyMsg) {
+            emptyMsg.style.display = 'none';
         }
     }
+    
+    function updateScheduleName(scriptName) {
+        const nameField = document.getElementById('name');
+        if (!nameField.value && scriptName) {
+            const frequency = document.querySelector('input[name="frequency"]:checked').value;
+            const frequencyName = frequency.charAt(0).toUpperCase() + frequency.slice(1);
+            nameField.value = `${frequencyName} ${scriptName}`;
+        }
+    }
+    
+    // Initialize
+    resetFilter();
 });
 
 // Start date helper functions
@@ -393,19 +495,26 @@ function setStartDate(type) {
     const startDateField = document.getElementById('start_date');
     const today = new Date();
     
+    function formatDateForInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
     switch(type) {
         case 'today':
-            startDateField.value = today.toISOString().split('T')[0];
+            startDateField.value = formatDateForInput(today);
             break;
         case 'tomorrow':
             const tomorrow = new Date(today);
             tomorrow.setDate(today.getDate() + 1);
-            startDateField.value = tomorrow.toISOString().split('T')[0];
+            startDateField.value = formatDateForInput(tomorrow);
             break;
         case 'next_week':
             const nextWeek = new Date(today);
             nextWeek.setDate(today.getDate() + 7);
-            startDateField.value = nextWeek.toISOString().split('T')[0];
+            startDateField.value = formatDateForInput(nextWeek);
             break;
     }
     updatePreview();
@@ -439,17 +548,29 @@ function updatePreview() {
     
     // Add start date info if specified
     if (startDate) {
-        const startDateObj = new Date(startDate);
+        const startDateObj = new Date(startDate + 'T00:00:00'); // Force local timezone
         const today = new Date();
         const tomorrow = new Date(today);
         tomorrow.setDate(today.getDate() + 1);
         
-        if (startDate === today.toISOString().split('T')[0]) {
+        // Get date strings in YYYY-MM-DD format for comparison
+        const todayStr = today.getFullYear() + '-' + 
+                        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(today.getDate()).padStart(2, '0');
+        const tomorrowStr = tomorrow.getFullYear() + '-' + 
+                           String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(tomorrow.getDate()).padStart(2, '0');
+        
+        if (startDate === todayStr) {
             startText = ' starting today';
-        } else if (startDate === tomorrow.toISOString().split('T')[0]) {
+        } else if (startDate === tomorrowStr) {
             startText = ' starting tomorrow';
         } else {
-            startText = ` starting ${startDateObj.toLocaleDateString()}`;
+            // Format date as DD/MM/YYYY for display
+            const day = String(startDateObj.getDate()).padStart(2, '0');
+            const month = String(startDateObj.getMonth() + 1).padStart(2, '0');
+            const year = startDateObj.getFullYear();
+            startText = ` starting ${day}/${month}/${year}`;
         }
     }
     
@@ -492,16 +613,7 @@ function getDaySuffix(day) {
     return 'th';
 }
 
-// Auto-populate schedule name based on script selection
-document.getElementById('script_id').addEventListener('change', function() {
-    const nameField = document.getElementById('name');
-    if (!nameField.value && this.selectedOptions[0]) {
-        const scriptName = this.selectedOptions[0].text.split('] ')[1]; // Remove [PY] or [BAT] prefix
-        const frequency = document.querySelector('input[name="frequency"]:checked').value;
-        const frequencyName = frequency.charAt(0).toUpperCase() + frequency.slice(1);
-        nameField.value = `${frequencyName} ${scriptName}`;
-    }
-});
+// Note: Schedule name auto-population is now handled in the script search functionality above
 
 // Initialize preview on page load
 document.addEventListener('DOMContentLoaded', function() {

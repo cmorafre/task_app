@@ -240,7 +240,7 @@
                                         <td>
                                             <span class="status-indicator status-{{ execution.status_color }}">
                                                 {{ execution.status_icon }}
-                                                {{ execution.status.value.title() }}
+                                                {{ execution.status|title }}
                                             </span>
                                         </td>
                                         <td>{{ execution.formatted_duration }}</td>

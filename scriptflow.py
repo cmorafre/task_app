@@ -23,7 +23,9 @@ import atexit
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+# Configure Flask to use instance folder for database
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///scriptflow.db')
+app.instance_relative_config = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
@@ -39,13 +41,8 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access ScriptFlow.'
 
-# Initialize scheduler
-jobstores = {
-    'default': SQLAlchemyJobStore(url=app.config['SQLALCHEMY_DATABASE_URI'])
-}
-scheduler = BackgroundScheduler(jobstores=jobstores)
-scheduler.start()
-atexit.register(lambda: scheduler.shutdown())
+# Initialize scheduler (will be configured later after database is ready)
+scheduler = None
 
 # Models
 class User(UserMixin, db.Model):
@@ -251,8 +248,8 @@ class Schedule(db.Model):
         if start_date_str:
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                # If start date is in the future, use it as the minimum date
-                if start_date.date() > now.date():
+                # If start date is today or in the future, use it as the minimum date
+                if start_date.date() >= now.date():
                     minimum_date = start_date.date()
             except ValueError:
                 pass
@@ -261,15 +258,17 @@ class Schedule(db.Model):
             time_str = config.get('time', '09:00')
             hour, minute = map(int, time_str.split(':'))
             
-            # Start with today's time
-            next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            
-            # If time has passed today and no minimum date, schedule for tomorrow
-            if next_run <= original_now and not minimum_date:
-                next_run += timedelta(days=1)
-            # If we have a minimum date, ensure we don't schedule before it
-            elif minimum_date and next_run.date() < minimum_date:
-                next_run = datetime.combine(minimum_date, next_run.time())
+            if minimum_date and minimum_date > now.date():
+                # If we have a future start date, use it
+                next_run = datetime.combine(minimum_date, datetime.min.time())
+                next_run = next_run.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            else:
+                # Start with today's time
+                next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                
+                # If time has passed today, schedule for tomorrow
+                if next_run <= original_now:
+                    next_run += timedelta(days=1)
                 
         elif self.frequency == 'weekly':
             time_str = config.get('time', '09:00')
@@ -726,6 +725,44 @@ def view_execution(execution_id):
     execution = Execution.query.filter_by(id=execution_id, user_id=current_user.id).first_or_404()
     return render_template('execution_detail.html', execution=execution)
 
+@app.route('/api/logs')
+@login_required
+def logs_api():
+    """API endpoint to get execution logs for AJAX refresh"""
+    page = request.args.get('page', 1, type=int)
+    executions = Execution.query.filter_by(user_id=current_user.id)\
+        .order_by(Execution.started_at.desc())\
+        .paginate(page=page, per_page=20, error_out=False)
+    
+    # Convert executions to JSON format
+    executions_data = []
+    for execution in executions.items:
+        executions_data.append({
+            'id': execution.id,
+            'script_name': execution.script.name if execution.script else 'Unknown',
+            'status': execution.status,
+            'started_at': execution.started_at.strftime('%Y-%m-%d %H:%M:%S') if execution.started_at else None,
+            'duration': execution.formatted_duration,
+            'exit_code': execution.exit_code,
+            'status_icon': execution.status_icon,
+            'status_color': execution.status_color
+        })
+    
+    return jsonify({
+        'executions': executions_data,
+        'has_running': any(ex.status in ['pending', 'running'] for ex in executions.items),
+        'pagination': {
+            'page': executions.page,
+            'pages': executions.pages,
+            'per_page': executions.per_page,
+            'total': executions.total,
+            'has_prev': executions.has_prev,
+            'has_next': executions.has_next,
+            'prev_num': executions.prev_num,
+            'next_num': executions.next_num
+        }
+    })
+
 @app.route('/api/execution/<int:execution_id>/status')
 @login_required
 def execution_status_api(execution_id):
@@ -992,11 +1029,16 @@ def edit_schedule(schedule_id):
         schedule.description = request.form.get('description', '').strip()
         schedule.frequency = request.form.get('frequency', '')
         time = request.form.get('time', '09:00')
+        start_date = request.form.get('start_date', '')
         was_active = schedule.is_active
         schedule.is_active = bool(request.form.get('is_active'))
         
         # Build time configuration
         time_config = {'time': time}
+        
+        # Add start date if specified
+        if start_date:
+            time_config['start_date'] = start_date
         
         if schedule.frequency == 'weekly':
             days = request.form.getlist('days')
@@ -1099,8 +1141,41 @@ def run_schedule_now(schedule_id):
     flash(f'Schedule "{schedule.name}" executed manually!', 'success')
     return redirect(url_for('logs'))
 
+def init_scheduler():
+    """Initialize APScheduler if not already initialized"""
+    global scheduler
+    if scheduler is None:
+        try:
+            # Use Flask's instance path for database
+            db_path = os.path.join(app.instance_path, 'scriptflow.db')
+            db_uri = f'sqlite:///{db_path}'
+            
+            # Ensure instance directory exists
+            os.makedirs(app.instance_path, exist_ok=True)
+            
+            # Ensure database permissions are correct if file exists
+            if os.path.exists(db_path):
+                os.chmod(db_path, 0o664)
+            
+            jobstores = {
+                'default': SQLAlchemyJobStore(url=db_uri)
+            }
+            scheduler = BackgroundScheduler(jobstores=jobstores)
+            scheduler.start()
+            atexit.register(lambda: scheduler.shutdown())
+            print(f"✅ Scheduler initialized with database: {db_path}")
+        except Exception as e:
+            print(f"❌ Error initializing scheduler: {e}")
+            raise
+
 def add_schedule_to_scheduler(schedule):
     """Add schedule to APScheduler"""
+    global scheduler
+    
+    # Initialize scheduler if not ready
+    if scheduler is None:
+        init_scheduler()
+    
     job_id = f"schedule_{schedule.id}"
     
     # Remove existing job if exists
@@ -1124,47 +1199,90 @@ def add_schedule_to_scheduler(schedule):
 
 def remove_schedule_from_scheduler(schedule_id):
     """Remove schedule from APScheduler"""
+    global scheduler
+    
+    # Initialize scheduler if not ready
+    if scheduler is None:
+        init_scheduler()
+    
     job_id = f"schedule_{schedule_id}"
     try:
         scheduler.remove_job(job_id)
-    except:
+        print(f"🗑️ Removed job {job_id} from scheduler")
+    except Exception as e:
+        # Job might already be gone or never existed - this is OK
+        print(f"ℹ️ Job {job_id} was already removed or not found in scheduler")
         pass
 
 def execute_scheduled_script(schedule_id):
     """Execute script from schedule (called by APScheduler)"""
     with app.app_context():
-        schedule = Schedule.query.get(schedule_id)
-        if not schedule or not schedule.is_active:
-            return
-        
-        script = schedule.script
-        if not script or not script.file_exists:
-            return
-        
-        # Create execution record
-        execution = Execution(
-            script_id=script.id,
-            user_id=schedule.user_id,
-            status='pending',
-            trigger_type='scheduled'
-        )
-        db.session.add(execution)
-        db.session.commit()
-        
-        # Update schedule's last execution
-        schedule.last_execution_id = execution.id
-        
-        # Calculate and schedule next run
-        schedule.calculate_next_run()
-        db.session.commit()
-        
-        # Add next job to scheduler
-        add_schedule_to_scheduler(schedule)
-        
-        # Execute script in background
-        thread = threading.Thread(target=execute_script_background, args=(execution.id, script.file_path, script.script_type))
-        thread.daemon = True
-        thread.start()
+        try:
+            # Get fresh schedule object from database
+            schedule = Schedule.query.get(schedule_id)
+            if not schedule or not schedule.is_active:
+                print(f"❌ Schedule {schedule_id} not found or inactive")
+                return
+            
+            script = schedule.script
+            if not script or not script.file_exists:
+                print(f"❌ Script not found or file missing for schedule {schedule.name}")
+                return
+            
+            print(f"🚀 Executing scheduled script: {schedule.name}")
+            
+            # Create execution record
+            execution = Execution(
+                script_id=script.id,
+                user_id=schedule.user_id,
+                status='pending',
+                trigger_type='scheduled'
+            )
+            db.session.add(execution)
+            db.session.commit()  # Commit execution first to get the ID
+            print(f"💾 Execution record created with ID: {execution.id}")
+            
+            # Update schedule's last execution
+            schedule.last_execution_id = execution.id
+            
+            # Remove current job from scheduler (since it just executed)
+            remove_schedule_from_scheduler(schedule.id)
+            
+            # Calculate and schedule next run
+            old_next_run = schedule.next_run_time
+            print(f"📅 Schedule {schedule.name}: Calculating next run from {old_next_run}")
+            
+            schedule.calculate_next_run()
+            new_next_run = schedule.next_run_time
+            
+            print(f"📅 Schedule {schedule.name}: Updated next run to {new_next_run}")
+            
+            # Commit schedule changes
+            db.session.commit()
+            print(f"💾 Schedule updated with last_execution_id: {execution.id}")
+            
+            # Add next job to scheduler if there's a next run time
+            if schedule.next_run_time and schedule.is_active:
+                add_schedule_to_scheduler(schedule)
+                print(f"✅ Schedule {schedule.name} re-scheduled for {schedule.next_run_time}")
+            else:
+                print(f"❌ Schedule {schedule.name} not re-scheduled (active: {schedule.is_active}, next_run: {schedule.next_run_time})")
+            
+            # Execute script in background
+            thread = threading.Thread(target=execute_script_background, args=(execution.id, script.file_path, script.script_type))
+            thread.daemon = True
+            thread.start()
+            print(f"🔄 Script execution started in background for {schedule.name}")
+            
+        except Exception as e:
+            print(f"❌ Error in execute_scheduled_script for schedule {schedule_id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Try to rollback if there were database changes
+            try:
+                db.session.rollback()
+            except:
+                pass
 
 @app.route('/settings/terminal')
 @login_required  
@@ -1239,6 +1357,9 @@ if __name__ == '__main__':
     
     with app.app_context():
         db.create_all()
+        
+        # Initialize scheduler after database is ready
+        init_scheduler()
         
         # Create default admin user if none exists
         if not User.query.filter_by(username='admin').first():

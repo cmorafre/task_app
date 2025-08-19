@@ -8,15 +8,6 @@
     .status-warning { color: #F39C12; }
     .status-danger { color: #E74C3C; }
     
-    /* Rotating icon animation for running status */
-    .rotating-icon {
-        animation: rotate 2s linear infinite;
-    }
-    @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    
     /* Auto-refresh indicator */
     .auto-refresh-indicator {
         position: fixed;
@@ -29,6 +20,40 @@
     .badge {
         font-size: 0.8rem;
         padding: 0.4rem 0.7rem;
+    }
+    
+    /* Enhanced running status badge */
+    .status-running {
+        background: linear-gradient(45deg, #ff6b00, #ff8c00) !important;
+        color: white !important;
+        animation: pulse 1.5s infinite;
+        border: none !important;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(255, 107, 0, 0.3);
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    
+    .rotating-icon {
+        animation: spin 1.5s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Smooth transitions for table updates */
+    #logsTableBody tr {
+        transition: all 0.3s ease;
+    }
+    
+    #logsTableBody tr.updating {
+        opacity: 0.7;
+        transform: scale(0.98);
     }
 </style>
 {% endblock %}
@@ -46,8 +71,31 @@
                 <h1><i class="bi bi-clock-history me-2"></i>Execution Logs</h1>
                 <p class="text-muted">
                     <i class="bi bi-info-circle me-1"></i>
-                    Page refreshes automatically every 10 seconds when scripts are running
+                    Live monitoring of script executions with real-time updates
                 </p>
+            </div>
+            <div class="col-auto">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary" id="refreshToggle" onclick="toggleAutoRefresh()">
+                        <i class="bi bi-play-fill me-1" id="refreshIcon"></i>
+                        <span id="refreshText">Start Auto-Refresh</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="manualRefresh()" title="Refresh Now">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-speedometer2 me-1"></i>
+                            <span id="intervalText">2s</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(1000)">1 second</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(2000)">2 seconds</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(5000)">5 seconds</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(10000)">10 seconds</a></li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -55,7 +103,7 @@
             <div class="card-body p-0">
                 {% if executions.items %}
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                        <table class="table table-hover mb-0" id="logsTable">
                             <thead class="table-light">
                                 <tr>
                                     <th>Script</th>
@@ -66,7 +114,7 @@
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="logsTableBody">
                                 {% for execution in executions.items %}
                                 <tr>
                                     <td>
@@ -74,7 +122,7 @@
                                     </td>
                                     <td>
                                         {% if execution.status == 'running' %}
-                                            <span class="badge bg-warning d-flex align-items-center gap-1">
+                                            <span class="badge status-running d-flex align-items-center gap-1">
                                                 <i class="bi bi-arrow-clockwise rotating-icon"></i>
                                                 Running
                                             </span>
@@ -100,7 +148,7 @@
                                             </span>
                                         {% else %}
                                             <span class="badge bg-secondary">
-                                                {{ execution.status.title() }}
+                                                {{ execution.status|title }}
                                             </span>
                                         {% endif %}
                                     </td>
@@ -181,24 +229,30 @@
 {% block extra_js %}
 <script>
         let refreshInterval = null;
+        let refreshIntervalMs = 2000; // Default 2 seconds
+        let isAutoRefreshEnabled = false;
+        let currentPage = {{ executions.page }};
         
-        function hasRunningExecutions() {
-            // Check if there are any running executions on the page
-            return document.querySelector('.badge.bg-warning') !== null;
+        // Auto-refresh control functions
+        function toggleAutoRefresh() {
+            if (isAutoRefreshEnabled) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
         }
         
         function startAutoRefresh() {
             if (refreshInterval) return; // Already running
             
+            isAutoRefreshEnabled = true;
+            updateRefreshButton();
+            
             refreshInterval = setInterval(function() {
-                if (hasRunningExecutions()) {
-                    showRefreshIndicator();
-                    // Reload the page to get updated status
-                    window.location.reload();
-                } else {
-                    stopAutoRefresh();
-                }
-            }, 10000); // Refresh every 10 seconds
+                loadLogs();
+            }, refreshIntervalMs);
+            
+            showToast('Auto-refresh started', `Refreshing every ${refreshIntervalMs/1000}s`, 'success');
         }
         
         function stopAutoRefresh() {
@@ -206,17 +260,135 @@
                 clearInterval(refreshInterval);
                 refreshInterval = null;
             }
+            isAutoRefreshEnabled = false;
+            updateRefreshButton();
             hideRefreshIndicator();
+            showToast('Auto-refresh stopped', 'Manual refresh only', 'info');
         }
         
+        function updateRefreshButton() {
+            const toggle = document.getElementById('refreshToggle');
+            const icon = document.getElementById('refreshIcon');
+            const text = document.getElementById('refreshText');
+            
+            if (isAutoRefreshEnabled) {
+                toggle.classList.remove('btn-outline-primary');
+                toggle.classList.add('btn-primary');
+                icon.className = 'bi bi-pause-fill me-1';
+                text.textContent = 'Stop Auto-Refresh';
+            } else {
+                toggle.classList.remove('btn-primary');
+                toggle.classList.add('btn-outline-primary');
+                icon.className = 'bi bi-play-fill me-1';
+                text.textContent = 'Start Auto-Refresh';
+            }
+        }
+        
+        function setRefreshInterval(ms) {
+            refreshIntervalMs = ms;
+            document.getElementById('intervalText').textContent = ms >= 1000 ? `${ms/1000}s` : `${ms}ms`;
+            
+            // Restart auto-refresh with new interval if it's running
+            if (isAutoRefreshEnabled) {
+                stopAutoRefresh();
+                startAutoRefresh();
+            }
+        }
+        
+        function manualRefresh() {
+            loadLogs();
+            showToast('Manual refresh', 'Logs updated', 'info');
+        }
+        
+        // AJAX functions
+        function loadLogs() {
+            showRefreshIndicator();
+            
+            fetch(`/api/logs?page=${currentPage}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateLogsTable(data.executions);
+                    
+                    // Auto-stop refresh if no running executions and auto-refresh is enabled
+                    if (isAutoRefreshEnabled && !data.has_running) {
+                        setTimeout(() => {
+                            if (isAutoRefreshEnabled) {
+                                stopAutoRefresh();
+                                showToast('Auto-refresh stopped', 'No running executions detected', 'info');
+                            }
+                        }, 5000); // Wait 5 seconds before stopping
+                    }
+                    
+                    hideRefreshIndicator();
+                })
+                .catch(error => {
+                    console.error('Error loading logs:', error);
+                    hideRefreshIndicator();
+                    showToast('Refresh failed', 'Could not update logs', 'danger');
+                });
+        }
+        
+        function updateLogsTable(executions) {
+            const tbody = document.getElementById('logsTableBody');
+            if (!tbody) return;
+            
+            // Store current scroll position
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            tbody.innerHTML = '';
+            
+            executions.forEach(execution => {
+                const row = createExecutionRow(execution);
+                tbody.appendChild(row);
+            });
+            
+            // Restore scroll position
+            window.scrollTo(0, scrollTop);
+        }
+        
+        function createExecutionRow(execution) {
+            const row = document.createElement('tr');
+            
+            const statusBadge = createStatusBadge(execution.status);
+            const exitCodeBadge = execution.exit_code !== null 
+                ? `<span class="badge bg-${execution.exit_code === 0 ? 'success' : 'danger'}">${execution.exit_code}</span>`
+                : '<span class="text-muted">-</span>';
+            
+            row.innerHTML = `
+                <td><strong>${execution.script_name}</strong></td>
+                <td>${statusBadge}</td>
+                <td>${execution.started_at || ''}</td>
+                <td>${execution.duration}</td>
+                <td>${exitCodeBadge}</td>
+                <td>
+                    <a href="/logs/${execution.id}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye me-1"></i>View
+                    </a>
+                </td>
+            `;
+            
+            return row;
+        }
+        
+        function createStatusBadge(status) {
+            const badges = {
+                'running': '<span class="badge status-running d-flex align-items-center gap-1"><i class="bi bi-arrow-clockwise rotating-icon"></i>Running</span>',
+                'completed': '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Completed</span>',
+                'failed': '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Failed</span>',
+                'pending': '<span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>Pending</span>',
+                'timeout': '<span class="badge bg-warning"><i class="bi bi-stopwatch me-1"></i>Timeout</span>',
+                'cancelled': '<span class="badge bg-danger"><i class="bi bi-stop-circle me-1"></i>Cancelled</span>'
+            };
+            
+            return badges[status] || `<span class="badge bg-secondary">${status}</span>`;
+        }
+        
+        // Utility functions
         function showRefreshIndicator() {
             const indicator = document.getElementById('refreshIndicator');
             if (indicator) {
                 indicator.style.display = 'block';
-                // Hide after 2 seconds
-                setTimeout(() => {
-                    hideRefreshIndicator();
-                }, 2000);
+                setTimeout(() => hideRefreshIndicator(), 1000);
             }
         }
         
@@ -227,34 +399,56 @@
             }
         }
         
-        // Start auto-refresh when page loads if there are running executions
+        function showToast(title, message, type = 'info') {
+            const toastContainer = getOrCreateToastContainer();
+            
+            const toastId = 'toast-' + Date.now();
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = 'toast align-items-center text-white bg-' + (type === 'info' ? 'primary' : type);
+            toast.setAttribute('role', 'alert');
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <strong>${title}</strong><br>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            const bsToast = new bootstrap.Toast(toast, { delay: 3000 });
+            bsToast.show();
+            
+            toast.addEventListener('hidden.bs.toast', function() {
+                toast.remove();
+            });
+        }
+        
+        function getOrCreateToastContainer() {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container position-fixed top-0 end-0 p-3';
+                container.style.zIndex = '1055';
+                document.body.appendChild(container);
+            }
+            return container;
+        }
+        
+        function hasRunningExecutions() {
+            return document.querySelector('.badge.status-running') !== null;
+        }
+        
+        // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Auto-start refresh if there are running executions
             if (hasRunningExecutions()) {
                 startAutoRefresh();
-                
-                // Show a toast to inform the user
-                const toastHtml = `
-                    <div class="toast align-items-center text-white bg-info border-0" role="alert" style="position: fixed; top: 100px; right: 20px; z-index: 1100;">
-                        <div class="d-flex">
-                            <div class="toast-body">
-                                <i class="bi bi-info-circle me-2"></i>
-                                Auto-refresh enabled for running scripts
-                            </div>
-                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                        </div>
-                    </div>
-                `;
-                document.body.insertAdjacentHTML('beforeend', toastHtml);
-                
-                // Show the toast
-                const toastElement = document.querySelector('.toast');
-                const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
-                toast.show();
-                
-                // Remove the toast element after it's hidden
-                toastElement.addEventListener('hidden.bs.toast', function() {
-                    toastElement.remove();
-                });
+                showToast('Live monitoring', 'Auto-refresh started automatically', 'info');
             }
         });
         

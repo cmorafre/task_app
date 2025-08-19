@@ -2,6 +2,16 @@
 
 {% block title %}Edit Schedule - ScriptFlow{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Quick start buttons */
+    .btn-outline-secondary.btn-sm {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <div class="row">
@@ -114,11 +124,29 @@
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <div class="mb-3">
                                             <label for="time" class="form-label">Time *</label>
                                             <input type="time" class="form-control" id="time" name="time" 
                                                    value="{{ schedule.time_config_json.get('time', '09:00') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label for="start_date" class="form-label">Start Date</label>
+                                            <input type="date" class="form-control" id="start_date" name="start_date"
+                                                   value="{{ schedule.time_config_json.get('start_date', '') }}">
+                                            <small class="text-muted">Leave empty to use current schedule</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Quick Start</label>
+                                            <div>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="setStartDate('today')">Today</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="setStartDate('tomorrow')">Tomorrow</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setStartDate('next_week')">Next Week</button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -257,7 +285,7 @@ document.addEventListener('change', function(e) {
         updateFrequencyOptions();
         updatePreview();
     }
-    if (e.target.name === 'days' || e.target.name === 'time' || e.target.id === 'day') {
+    if (e.target.name === 'days' || e.target.name === 'time' || e.target.id === 'day' || e.target.id === 'start_date') {
         updatePreview();
     }
 });
@@ -282,12 +310,42 @@ function updateFrequencyOptions() {
 function updatePreview() {
     const frequency = document.querySelector('input[name="frequency"]:checked').value;
     const time = document.getElementById('time').value;
+    const startDate = document.getElementById('start_date').value;
     const preview = document.getElementById('schedule_preview');
     
     let previewText = '';
+    let startText = '';
+    
+    // Add start date info if specified
+    if (startDate) {
+        const startDateObj = new Date(startDate + 'T00:00:00'); // Force local timezone
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        
+        // Get date strings in YYYY-MM-DD format for comparison
+        const todayStr = today.getFullYear() + '-' + 
+                        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(today.getDate()).padStart(2, '0');
+        const tomorrowStr = tomorrow.getFullYear() + '-' + 
+                           String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(tomorrow.getDate()).padStart(2, '0');
+        
+        if (startDate === todayStr) {
+            startText = ' starting today';
+        } else if (startDate === tomorrowStr) {
+            startText = ' starting tomorrow';
+        } else {
+            // Format date as DD/MM/YYYY for display
+            const day = String(startDateObj.getDate()).padStart(2, '0');
+            const month = String(startDateObj.getMonth() + 1).padStart(2, '0');
+            const year = startDateObj.getFullYear();
+            startText = ` starting ${day}/${month}/${year}`;
+        }
+    }
     
     if (frequency === 'daily') {
-        previewText = `This schedule will run daily at ${time}`;
+        previewText = `This schedule will run daily at ${time}${startText}`;
     } else if (frequency === 'weekly') {
         const checkedDays = Array.from(document.querySelectorAll('input[name="days"]:checked'))
             .map(cb => cb.value)
@@ -296,14 +354,14 @@ function updatePreview() {
         if (checkedDays.length === 0) {
             previewText = `Please select at least one day of the week`;
         } else if (checkedDays.length === 1) {
-            previewText = `This schedule will run every ${checkedDays[0]} at ${time}`;
+            previewText = `This schedule will run every ${checkedDays[0]} at ${time}${startText}`;
         } else {
-            previewText = `This schedule will run on ${checkedDays.join(', ')} at ${time}`;
+            previewText = `This schedule will run on ${checkedDays.join(', ')} at ${time}${startText}`;
         }
     } else if (frequency === 'monthly') {
         const day = document.getElementById('day').value || '1';
         const suffix = getDaySuffix(day);
-        previewText = `This schedule will run on the ${day}${suffix} of each month at ${time}`;
+        previewText = `This schedule will run on the ${day}${suffix} of each month at ${time}${startText}`;
     }
     
     preview.textContent = previewText;
@@ -323,6 +381,36 @@ function getDaySuffix(day) {
         return 'rd';
     }
     return 'th';
+}
+
+// Start date helper functions
+function setStartDate(type) {
+    const startDateField = document.getElementById('start_date');
+    const today = new Date();
+    
+    function formatDateForInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    switch(type) {
+        case 'today':
+            startDateField.value = formatDateForInput(today);
+            break;
+        case 'tomorrow':
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            startDateField.value = formatDateForInput(tomorrow);
+            break;
+        case 'next_week':
+            const nextWeek = new Date(today);
+            nextWeek.setDate(today.getDate() + 7);
+            startDateField.value = formatDateForInput(nextWeek);
+            break;
+    }
+    updatePreview();
 }
 
 // Initialize frequency options and preview on page load

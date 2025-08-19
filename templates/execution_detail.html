@@ -119,7 +119,7 @@
                     <div class="col-md-6">
                         <p><strong>Status:</strong> 
                             <span class="status-{{ execution.status_color }}">
-                                {{ execution.status_icon }} {{ execution.status.title() }}
+                                {{ execution.status_icon }} {{ execution.status|title }}
                             </span>
                         </p>
                         <p><strong>Started:</strong> {{ execution.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>

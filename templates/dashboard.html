@@ -69,8 +69,8 @@
                                 </a>
                             </div>
                             <div class="col-md-6">
-                                <a href="#" class="btn btn-outline-secondary w-100">
-                                    <i class="bi bi-calendar me-2"></i>Schedules (Soon)
+                                <a href="{{ url_for('schedules') }}" class="btn btn-outline-primary w-100">
+                                    <i class="bi bi-calendar me-2"></i>Schedules
                                 </a>
                             </div>
                         </div>
@@ -153,7 +153,7 @@
                                             </td>
                                             <td>
                                                 <span class="status-{{ execution.status_color }}">
-                                                    {{ execution.status_icon }} {{ execution.status.title() }}
+                                                    {{ execution.status_icon }} {{ execution.status|title }}
                                                 </span>
                                             </td>
                                             <td>{{ execution.formatted_duration }}</td>
