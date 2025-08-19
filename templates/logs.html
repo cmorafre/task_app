@@ -59,6 +59,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="container-fluid">
     <!-- Auto-refresh indicator -->
     <div class="auto-refresh-indicator">
         <div class="alert alert-info alert-sm py-1 px-2 mb-0" id="refreshIndicator" style="display: none;">
@@ -66,38 +67,45 @@
             <small>Auto-refreshing...</small>
         </div>
     </div>
-        <div class="row mb-4">
-            <div class="col">
-                <h1><i class="bi bi-clock-history me-2"></i>Execution Logs</h1>
-                <p class="text-muted">
-                    <i class="bi bi-info-circle me-1"></i>
-                    Live monitoring of script executions with real-time updates
-                </p>
-            </div>
-            <div class="col-auto">
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-primary" id="refreshToggle" onclick="toggleAutoRefresh()">
-                        <i class="bi bi-play-fill me-1" id="refreshIcon"></i>
-                        <span id="refreshText">Start Auto-Refresh</span>
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="manualRefresh()" title="Refresh Now">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h1>
+                        <i class="bi bi-clock-history"></i>Execution Logs
+                    </h1>
+                    <p>Live monitoring of script executions with real-time updates</p>
+                </div>
+                <div class="col-auto">
                     <div class="btn-group" role="group">
-                        <button class="btn btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-speedometer2 me-1"></i>
-                            <span id="intervalText">2s</span>
+                        <button type="button" class="btn btn-lg" id="refreshToggle" onclick="toggleAutoRefresh()">
+                            <i class="bi bi-play-fill me-1" id="refreshIcon"></i>
+                            <span id="refreshText">Start Auto-Refresh</span>
                         </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(1000)">1 second</a></li>
-                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(2000)">2 seconds</a></li>
-                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(5000)">5 seconds</a></li>
-                            <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(10000)">10 seconds</a></li>
-                        </ul>
+                        <button type="button" class="btn btn-lg" onclick="manualRefresh()" title="Refresh Now">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-lg dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-speedometer2 me-1"></i>
+                                <span id="intervalText">2s</span>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(1000)">1 second</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(2000)">2 seconds</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(5000)">5 seconds</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="setRefreshInterval(10000)">10 seconds</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="container">
 
         <div class="card">
             <div class="card-body p-0">
@@ -224,6 +232,8 @@
                 {% endif %}
             </div>
         </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}

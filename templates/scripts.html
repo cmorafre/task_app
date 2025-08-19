@@ -109,17 +109,29 @@
 {% endblock %}
 
 {% block content %}
-
-        <div class="row mb-4">
-            <div class="col">
-                <h1><i class="bi bi-file-code me-2"></i>Scripts</h1>
-            </div>
-            <div class="col-auto">
-                <a href="{{ url_for('upload_script') }}" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>Upload Script
-                </a>
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h1>
+                        <i class="bi bi-file-code"></i>Scripts
+                    </h1>
+                    <p>Manage and execute your automation scripts</p>
+                </div>
+                <div class="col-auto">
+                    <a href="{{ url_for('upload_script') }}" class="btn btn-lg">
+                        <i class="bi bi-plus-circle me-2"></i>Upload Script
+                    </a>
+                </div>
             </div>
         </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
 
         <div class="card">
             <div class="card-body p-0">

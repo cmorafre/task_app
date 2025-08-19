@@ -88,6 +88,53 @@ body.login-page {
 .status-warning { color: #F39C12; }
 .status-danger { color: #E74C3C; }
 
+/* PADRÃO GLOBAL: Page Headers */
+.page-header {
+    background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(44, 62, 80, 0.15);
+}
+
+.page-header h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.page-header h1 i {
+    margin-right: 0.75rem;
+    opacity: 0.9;
+}
+
+.page-header p {
+    font-size: 1.1rem;
+    margin-bottom: 0;
+    opacity: 0.85;
+    font-weight: 400;
+}
+
+.page-header .btn {
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.page-header .btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
+}
+
 /* Enhanced Running Status */
 .status-running {
     background: linear-gradient(45deg, #ff6b00, #ff8c00) !important;

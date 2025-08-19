@@ -6,7 +6,7 @@ Sistema de automação de scripts Python e Batch
 
 import os
 import socket
-from flask import Flask, render_template, request, flash, redirect, url_for, jsonify
+from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import threading
 import json
+from functools import wraps
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 import atexit
@@ -51,13 +52,21 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    can_view_all_data = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     last_login = db.Column(db.DateTime)
     
+    def set_password(self, password):
+        """Set password hash for the user"""
+        self.password_hash = generate_password_hash(password)
+    
     def check_password(self, password):
+        """Check if provided password matches the stored hash"""
         return check_password_hash(self.password_hash, password)
     
     def update_last_login(self):
+        """Update the last login timestamp"""
         self.last_login = datetime.now()
         db.session.commit()
 
@@ -355,6 +364,23 @@ class Schedule(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# Admin decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)  # Forbidden
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Helper function to apply data filters based on user permissions
+def apply_user_data_filter(query):
+    """Apply data filter based on user permissions"""
+    if current_user.can_view_all_data:
+        return query  # Can see all data
+    else:
+        return query.filter_by(user_id=current_user.id)  # Only own data
+
 # Global variables for script execution
 running_processes = {}
 
@@ -391,6 +417,74 @@ def login():
     
     return render_template('login.html')
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """User registration page"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        # Validation
+        if not username or not email or not password:
+            flash('Please fill in all required fields.', 'error')
+            return render_template('register.html')
+        
+        if len(username) < 3:
+            flash('Username must be at least 3 characters long.', 'error')
+            return render_template('register.html')
+        
+        if len(password) < 6:
+            flash('Password must be at least 6 characters long.', 'error')
+            return render_template('register.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('register.html')
+        
+        # Check if username or email already exists
+        existing_user = User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first()
+        
+        if existing_user:
+            if existing_user.username == username:
+                flash('Username already exists. Please choose a different username.', 'error')
+            else:
+                flash('Email already registered. Please use a different email.', 'error')
+            return render_template('register.html')
+        
+        # Create new user
+        try:
+            new_user = User(
+                username=username,
+                email=email
+            )
+            new_user.set_password(password)
+            
+            db.session.add(new_user)
+            db.session.commit()
+            
+            flash(f'Account created successfully! Welcome, {username}!', 'success')
+            
+            # Auto-login the new user
+            login_user(new_user)
+            return redirect(url_for('dashboard'))
+            
+        except Exception as e:
+            db.session.rollback()
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Registration error: {e}")
+            print(f"Full traceback: {error_details}")
+            flash('An error occurred while creating your account. Please try again.', 'error')
+    
+    return render_template('register.html')
+
 @app.route('/logout')
 @login_required
 def logout():
@@ -399,30 +493,210 @@ def logout():
     flash(f'Goodbye, {username}!', 'info')
     return redirect(url_for('login'))
 
+# User Management Routes (Admin Only)
+@app.route('/admin/users')
+@login_required
+@admin_required
+def manage_users():
+    """User management page for admins"""
+    users = User.query.order_by(User.created_at.desc()).all()
+    return render_template('admin/users.html', users=users)
+
+@app.route('/admin/users/create', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def create_user():
+    """Create new user (admin only)"""
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        is_admin = bool(request.form.get('is_admin'))
+        can_view_all_data = bool(request.form.get('can_view_all_data'))
+        
+        # Validation
+        if not username or not email or not password:
+            flash('Please fill in all required fields.', 'error')
+            return render_template('admin/create_user.html')
+        
+        if len(username) < 3:
+            flash('Username must be at least 3 characters long.', 'error')
+            return render_template('admin/create_user.html')
+        
+        if len(password) < 6:
+            flash('Password must be at least 6 characters long.', 'error')
+            return render_template('admin/create_user.html')
+        
+        # Check if username or email already exists
+        existing_user = User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first()
+        
+        if existing_user:
+            if existing_user.username == username:
+                flash('Username already exists. Please choose a different username.', 'error')
+            else:
+                flash('Email already registered. Please use a different email.', 'error')
+            return render_template('admin/create_user.html')
+        
+        # Create new user
+        try:
+            new_user = User(
+                username=username,
+                email=email,
+                is_admin=is_admin,
+                can_view_all_data=can_view_all_data
+            )
+            new_user.set_password(password)
+            
+            db.session.add(new_user)
+            db.session.commit()
+            
+            flash(f'User "{username}" created successfully!', 'success')
+            return redirect(url_for('manage_users'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"User creation error: {e}")
+            flash('An error occurred while creating the user. Please try again.', 'error')
+    
+    return render_template('admin/create_user.html')
+
+@app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def edit_user(user_id):
+    """Edit user (admin only)"""
+    user = User.query.get_or_404(user_id)
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        is_admin = bool(request.form.get('is_admin'))
+        can_view_all_data = bool(request.form.get('can_view_all_data'))
+        
+        # Validation
+        if not username or not email:
+            flash('Please fill in all required fields.', 'error')
+            # Get admin count for template
+            admin_count = User.query.filter_by(is_admin=True).count()
+            return render_template('admin/edit_user.html', user=user, admin_count=admin_count)
+        
+        if len(username) < 3:
+            flash('Username must be at least 3 characters long.', 'error')
+            return render_template('admin/edit_user.html', user=user)
+        
+        # Check if username or email already exists (excluding current user)
+        existing_user = User.query.filter(
+            (User.username == username) | (User.email == email),
+            User.id != user_id
+        ).first()
+        
+        if existing_user:
+            if existing_user.username == username:
+                flash('Username already exists. Please choose a different username.', 'error')
+            else:
+                flash('Email already registered. Please use a different email.', 'error')
+            return render_template('admin/edit_user.html', user=user)
+        
+        # Prevent removing admin status from last admin
+        if user.is_admin and not is_admin:
+            admin_count = User.query.filter_by(is_admin=True).count()
+            if admin_count <= 1:
+                flash('Cannot remove admin status. At least one admin must exist.', 'error')
+                return render_template('admin/edit_user.html', user=user)
+        
+        # Update user
+        try:
+            user.username = username
+            user.email = email
+            user.is_admin = is_admin
+            user.can_view_all_data = can_view_all_data
+            
+            # Update password if provided
+            if password and len(password) >= 6:
+                user.set_password(password)
+            elif password and len(password) < 6:
+                flash('Password must be at least 6 characters long if provided.', 'error')
+                return render_template('admin/edit_user.html', user=user)
+            
+            db.session.commit()
+            
+            flash(f'User "{username}" updated successfully!', 'success')
+            return redirect(url_for('manage_users'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"User update error: {e}")
+            flash('An error occurred while updating the user. Please try again.', 'error')
+    
+    # Get admin count for template
+    admin_count = User.query.filter_by(is_admin=True).count()
+    return render_template('admin/edit_user.html', user=user, admin_count=admin_count)
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    """Delete user (admin only)"""
+    user = User.query.get_or_404(user_id)
+    
+    # Prevent deleting yourself
+    if user.id == current_user.id:
+        return jsonify({'success': False, 'message': 'Cannot delete your own account'}), 400
+    
+    # Prevent deleting last admin
+    if user.is_admin:
+        admin_count = User.query.filter_by(is_admin=True).count()
+        if admin_count <= 1:
+            return jsonify({'success': False, 'message': 'Cannot delete the last admin user'}), 400
+    
+    try:
+        # Delete user's related data
+        Script.query.filter_by(user_id=user_id).delete()
+        Execution.query.filter_by(user_id=user_id).delete()
+        Schedule.query.filter_by(user_id=user_id).delete()
+        
+        # Delete user
+        db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': f'User "{user.username}" deleted successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"User deletion error: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred while deleting the user'}), 500
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Get user's scripts
-    user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True).all()
+    # Get user's scripts (apply permission filter)
+    scripts_query = Script.query.filter_by(is_active=True)
+    user_scripts = apply_user_data_filter(scripts_query).all()
     
-    # Get recent executions
-    recent_executions = Execution.query.filter_by(user_id=current_user.id)\
+    # Get recent executions (apply permission filter)
+    executions_query = Execution.query
+    recent_executions = apply_user_data_filter(executions_query)\
         .order_by(Execution.started_at.desc())\
         .limit(5).all()
     
     # Calculate stats
     total_scripts = len(user_scripts)
-    executions_24h = Execution.query.filter(
-        Execution.user_id == current_user.id,
+    # 24h executions with permission filter
+    executions_24h_query = Execution.query.filter(
         Execution.started_at >= datetime.now() - timedelta(days=1)
-    ).count()
+    )
+    executions_24h = apply_user_data_filter(executions_24h_query).count()
     
-    successful_24h = Execution.query.filter(
-        Execution.user_id == current_user.id,
+    # Successful executions with permission filter
+    successful_24h_query = Execution.query.filter(
         Execution.started_at >= datetime.now() - timedelta(days=1),
         Execution.status == 'completed',
         Execution.exit_code == 0
-    ).count()
+    )
+    successful_24h = apply_user_data_filter(successful_24h_query).count()
     
     success_rate = round((successful_24h / executions_24h * 100) if executions_24h > 0 else 100, 1)
     
@@ -441,8 +715,8 @@ def dashboard():
 @app.route('/scripts')
 @login_required
 def scripts():
-    user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True)\
-        .order_by(Script.updated_at.desc()).all()
+    scripts_query = Script.query.filter_by(is_active=True).order_by(Script.updated_at.desc())
+    user_scripts = apply_user_data_filter(scripts_query).all()
     return render_template('scripts.html', scripts=user_scripts)
 
 @app.route('/scripts/upload', methods=['GET', 'POST'])
@@ -713,16 +987,17 @@ def delete_script(script_id):
 @login_required
 def logs():
     page = request.args.get('page', 1, type=int)
-    executions = Execution.query.filter_by(user_id=current_user.id)\
-        .order_by(Execution.started_at.desc())\
-        .paginate(page=page, per_page=20, error_out=False)
+    executions_query = Execution.query.order_by(Execution.started_at.desc())
+    executions_filtered = apply_user_data_filter(executions_query)
+    executions = executions_filtered.paginate(page=page, per_page=20, error_out=False)
     
     return render_template('logs.html', executions=executions)
 
 @app.route('/logs/<int:execution_id>')
 @login_required
 def view_execution(execution_id):
-    execution = Execution.query.filter_by(id=execution_id, user_id=current_user.id).first_or_404()
+    execution_query = Execution.query.filter_by(id=execution_id)
+    execution = apply_user_data_filter(execution_query).first_or_404()
     return render_template('execution_detail.html', execution=execution)
 
 @app.route('/api/logs')
@@ -730,9 +1005,9 @@ def view_execution(execution_id):
 def logs_api():
     """API endpoint to get execution logs for AJAX refresh"""
     page = request.args.get('page', 1, type=int)
-    executions = Execution.query.filter_by(user_id=current_user.id)\
-        .order_by(Execution.started_at.desc())\
-        .paginate(page=page, per_page=20, error_out=False)
+    executions_query = Execution.query.order_by(Execution.started_at.desc())
+    executions_filtered = apply_user_data_filter(executions_query)
+    executions = executions_filtered.paginate(page=page, per_page=20, error_out=False)
     
     # Convert executions to JSON format
     executions_data = []
@@ -930,8 +1205,8 @@ def python_settings():
 @login_required
 def schedules():
     """Schedule management page"""
-    user_schedules = Schedule.query.filter_by(user_id=current_user.id)\
-        .order_by(Schedule.next_run_time.asc()).all()
+    schedules_query = Schedule.query.order_by(Schedule.next_run_time.asc())
+    user_schedules = apply_user_data_filter(schedules_query).all()
     
     # Get stats
     active_schedules = sum(1 for s in user_schedules if s.is_active)

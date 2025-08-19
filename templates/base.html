@@ -17,11 +17,26 @@
                 <i class="bi bi-gear-fill me-2"></i>ScriptFlow
             </a>
             <div class="navbar-nav ms-auto">
-                <a class="nav-link{% if request.endpoint == 'dashboard' %} active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="nav-link{% if request.endpoint in ['scripts', 'upload_script', 'edit_script', 'view_script'] %} active{% endif %}" href="{{ url_for('scripts') }}">Scripts</a>
-                <a class="nav-link{% if request.endpoint in ['schedules', 'create_schedule', 'edit_schedule'] %} active{% endif %}" href="{{ url_for('schedules') }}">Schedules</a>
-                <a class="nav-link{% if request.endpoint in ['logs', 'view_execution'] %} active{% endif %}" href="{{ url_for('logs') }}">Logs</a>
-                <a class="nav-link{% if request.endpoint in ['settings', 'python_settings', 'terminal'] %} active{% endif %}" href="{{ url_for('settings') }}">Settings</a>
+                <a class="nav-link{% if request.endpoint == 'dashboard' %} active{% endif %}" href="{{ url_for('dashboard') }}">
+                    <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                </a>
+                <a class="nav-link{% if request.endpoint in ['scripts', 'upload_script', 'edit_script', 'view_script'] %} active{% endif %}" href="{{ url_for('scripts') }}">
+                    <i class="bi bi-file-code me-1"></i>Scripts
+                </a>
+                <a class="nav-link{% if request.endpoint in ['schedules', 'create_schedule', 'edit_schedule'] %} active{% endif %}" href="{{ url_for('schedules') }}">
+                    <i class="bi bi-calendar3 me-1"></i>Schedules
+                </a>
+                <a class="nav-link{% if request.endpoint in ['logs', 'view_execution'] %} active{% endif %}" href="{{ url_for('logs') }}">
+                    <i class="bi bi-clock-history me-1"></i>Logs
+                </a>
+                {% if current_user.is_admin %}
+                <a class="nav-link{% if request.endpoint in ['manage_users', 'create_user', 'edit_user'] %} active{% endif %}" href="{{ url_for('manage_users') }}">
+                    <i class="bi bi-people-fill me-1"></i>Users
+                </a>
+                {% endif %}
+                <a class="nav-link{% if request.endpoint in ['settings', 'python_settings', 'terminal'] %} active{% endif %}" href="{{ url_for('settings') }}">
+                    <i class="bi bi-gear-fill me-1"></i>Settings
+                </a>
                 <div class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
