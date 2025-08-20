@@ -493,19 +493,19 @@ def register():
         # Validation
         if not username or not email or not password:
             flash('Please fill in all required fields.', 'error')
-            return render_template('register.html')
+            return render_template(UIVersionManager.get_template_path('register.html'))
         
         if len(username) < 3:
             flash('Username must be at least 3 characters long.', 'error')
-            return render_template('register.html')
+            return render_template(UIVersionManager.get_template_path('register.html'))
         
         if len(password) < 6:
             flash('Password must be at least 6 characters long.', 'error')
-            return render_template('register.html')
+            return render_template(UIVersionManager.get_template_path('register.html'))
         
         if password != confirm_password:
             flash('Passwords do not match.', 'error')
-            return render_template('register.html')
+            return render_template(UIVersionManager.get_template_path('register.html'))
         
         # Check if username or email already exists
         existing_user = User.query.filter(
@@ -517,7 +517,7 @@ def register():
                 flash('Username already exists. Please choose a different username.', 'error')
             else:
                 flash('Email already registered. Please use a different email.', 'error')
-            return render_template('register.html')
+            return render_template(UIVersionManager.get_template_path('register.html'))
         
         # Create new user
         try:
@@ -544,7 +544,7 @@ def register():
             print(f"Full traceback: {error_details}")
             flash('An error occurred while creating your account. Please try again.', 'error')
     
-    return render_template('register.html')
+    return render_template(UIVersionManager.get_template_path('register.html'))
 
 @app.route('/logout')
 @login_required
@@ -561,7 +561,7 @@ def logout():
 def manage_users():
     """User management page for admins"""
     users = User.query.order_by(User.created_at.desc()).all()
-    return render_template('admin/users.html', users=users)
+    return render_template(UIVersionManager.get_template_path('admin/users.html'), users=users)
 
 @app.route('/admin/users/create', methods=['GET', 'POST'])
 @login_required
@@ -578,15 +578,15 @@ def create_user():
         # Validation
         if not username or not email or not password:
             flash('Please fill in all required fields.', 'error')
-            return render_template('admin/create_user.html')
+            return render_template(UIVersionManager.get_template_path('admin/create_user.html'))
         
         if len(username) < 3:
             flash('Username must be at least 3 characters long.', 'error')
-            return render_template('admin/create_user.html')
+            return render_template(UIVersionManager.get_template_path('admin/create_user.html'))
         
         if len(password) < 6:
             flash('Password must be at least 6 characters long.', 'error')
-            return render_template('admin/create_user.html')
+            return render_template(UIVersionManager.get_template_path('admin/create_user.html'))
         
         # Check if username or email already exists
         existing_user = User.query.filter(
@@ -598,7 +598,7 @@ def create_user():
                 flash('Username already exists. Please choose a different username.', 'error')
             else:
                 flash('Email already registered. Please use a different email.', 'error')
-            return render_template('admin/create_user.html')
+            return render_template(UIVersionManager.get_template_path('admin/create_user.html'))
         
         # Create new user
         try:
@@ -621,7 +621,7 @@ def create_user():
             print(f"User creation error: {e}")
             flash('An error occurred while creating the user. Please try again.', 'error')
     
-    return render_template('admin/create_user.html')
+    return render_template(UIVersionManager.get_template_path('admin/create_user.html'))
 
 @app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -642,11 +642,11 @@ def edit_user(user_id):
             flash('Please fill in all required fields.', 'error')
             # Get admin count for template
             admin_count = User.query.filter_by(is_admin=True).count()
-            return render_template('admin/edit_user.html', user=user, admin_count=admin_count)
+            return render_template(UIVersionManager.get_template_path('admin/edit_user.html'), user=user, admin_count=admin_count)
         
         if len(username) < 3:
             flash('Username must be at least 3 characters long.', 'error')
-            return render_template('admin/edit_user.html', user=user)
+            return render_template(UIVersionManager.get_template_path('admin/edit_user.html'), user=user)
         
         # Check if username or email already exists (excluding current user)
         existing_user = User.query.filter(
@@ -659,14 +659,14 @@ def edit_user(user_id):
                 flash('Username already exists. Please choose a different username.', 'error')
             else:
                 flash('Email already registered. Please use a different email.', 'error')
-            return render_template('admin/edit_user.html', user=user)
+            return render_template(UIVersionManager.get_template_path('admin/edit_user.html'), user=user)
         
         # Prevent removing admin status from last admin
         if user.is_admin and not is_admin:
             admin_count = User.query.filter_by(is_admin=True).count()
             if admin_count <= 1:
                 flash('Cannot remove admin status. At least one admin must exist.', 'error')
-                return render_template('admin/edit_user.html', user=user)
+                return render_template(UIVersionManager.get_template_path('admin/edit_user.html'), user=user)
         
         # Update user
         try:
@@ -680,7 +680,7 @@ def edit_user(user_id):
                 user.set_password(password)
             elif password and len(password) < 6:
                 flash('Password must be at least 6 characters long if provided.', 'error')
-                return render_template('admin/edit_user.html', user=user)
+                return render_template(UIVersionManager.get_template_path('admin/edit_user.html'), user=user)
             
             db.session.commit()
             
@@ -694,7 +694,7 @@ def edit_user(user_id):
     
     # Get admin count for template
     admin_count = User.query.filter_by(is_admin=True).count()
-    return render_template('admin/edit_user.html', user=user, admin_count=admin_count)
+    return render_template(UIVersionManager.get_template_path('admin/edit_user.html'), user=user, admin_count=admin_count)
 
 @app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
 @login_required
@@ -848,7 +848,7 @@ def upload_script():
             flash(f'Error uploading script: {str(e)}', 'error')
             return redirect(request.url)
     
-    return render_template('upload.html')
+    return render_template(UIVersionManager.get_template_path('upload.html'))
 
 @app.route('/scripts/<int:script_id>/execute', methods=['GET', 'POST'])
 @login_required
@@ -865,7 +865,7 @@ def execute_script(script_id):
             .order_by(Execution.started_at.desc())\
             .limit(10).all()
         
-        return render_template('execute_script.html', 
+        return render_template(UIVersionManager.get_template_path('execute_script.html'), 
                              script=script,
                              recent_executions=recent_executions)
     
@@ -976,7 +976,7 @@ def view_script(script_id):
         flash(f'Error reading script file: {str(e)}', 'error')
         return redirect(url_for('scripts'))
     
-    return render_template('view_script.html', script=script, content=content)
+    return render_template(UIVersionManager.get_template_path('view_script.html'), script=script, content=content)
 
 @app.route('/scripts/<int:script_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -1010,7 +1010,7 @@ def edit_script(script_id):
         flash(f'Error reading script file: {str(e)}', 'error')
         return redirect(url_for('scripts'))
     
-    return render_template('edit_script.html', script=script, content=content)
+    return render_template(UIVersionManager.get_template_path('edit_script.html'), script=script, content=content)
 
 @app.route('/scripts/<int:script_id>/download')
 @login_required
@@ -1070,7 +1070,7 @@ def logs():
 def view_execution(execution_id):
     execution_query = Execution.query.filter_by(id=execution_id)
     execution = apply_user_data_filter(execution_query).first_or_404()
-    return render_template('execution_detail.html', execution=execution)
+    return render_template(UIVersionManager.get_template_path('execution_detail.html'), execution=execution)
 
 @app.route('/api/logs')
 @login_required
@@ -1268,7 +1268,7 @@ def python_settings():
     current_python_env = Settings.get_value('python_env', app.config['PYTHON_ENV']) or ''
     available_interpreters = detect_python_interpreters()
     
-    return render_template('python_settings.html', 
+    return render_template(UIVersionManager.get_template_path('python_settings.html'), 
                                 python_executable=current_python_exec,
                                 python_env=current_python_env,
                                 available_interpreters=available_interpreters)
@@ -1372,7 +1372,7 @@ def create_schedule():
     # GET request - show form
     user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True)\
         .order_by(Script.name).all()
-    return render_template('create_schedule.html', scripts=user_scripts)
+    return render_template(UIVersionManager.get_template_path('create_schedule.html'), scripts=user_scripts)
 
 @app.route('/schedules/<int:schedule_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -1435,7 +1435,7 @@ def edit_schedule(schedule_id):
     # GET request - show form
     user_scripts = Script.query.filter_by(user_id=current_user.id, is_active=True)\
         .order_by(Script.name).all()
-    return render_template('edit_schedule.html', schedule=schedule, scripts=user_scripts)
+    return render_template(UIVersionManager.get_template_path('edit_schedule.html'), schedule=schedule, scripts=user_scripts)
 
 @app.route('/schedules/<int:schedule_id>/toggle', methods=['POST'])
 @login_required
@@ -1721,7 +1721,7 @@ def execute_scheduled_script(schedule_id):
 @login_required  
 def terminal():
     """Web terminal for package installation"""
-    return render_template('terminal.html')
+    return render_template(UIVersionManager.get_template_path('terminal.html'))
 
 @app.route('/api/terminal/execute', methods=['POST'])
 @login_required

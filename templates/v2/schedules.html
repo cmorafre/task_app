@@ -1,0 +1,340 @@
+{% extends "v2/base.html" %}
+
+{% block page_title %}Schedules{% endblock %}
+{% block page_subtitle %}Automate your scripts with intelligent scheduling{% endblock %}
+
+{% block content %}
+<!-- Stats Overview -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-check-circle-fill text-success fs-4"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold">{{ stats.active }}</h3>
+                    <p class="text-muted mb-0 small">Active Schedules</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-secondary bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-pause-circle-fill text-secondary fs-4"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold">{{ stats.disabled }}</h3>
+                    <p class="text-muted mb-0 small">Disabled</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-clock-fill text-info fs-4"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="max-width: 120px;">{{ stats.next_run }}</h3>
+                    <p class="text-muted mb-0 small">Next Run</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-graph-up text-primary fs-4"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold">{{ stats.avg_per_day }}</h3>
+                    <p class="text-muted mb-0 small">Avg/Day</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1 fw-semibold">Schedule Management</h5>
+                    <p class="text-muted mb-0 small">Automate script execution with flexible scheduling options</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" onclick="refreshSchedules()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                    <a href="{{ url_for('create_schedule') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>Create Schedule
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schedules List -->
+{% if schedules %}
+<div class="row">
+    {% for schedule in schedules %}
+    <div class="col-lg-6 col-xl-4 mb-4">
+        <div class="modern-card h-100">
+            <!-- Schedule Header -->
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div class="d-flex align-items-center">
+                    <div class="bg-{{ 'success' if schedule.is_active else 'secondary' }} bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-{{ 'play-circle-fill' if schedule.is_active else 'pause-circle-fill' }} text-{{ 'success' if schedule.is_active else 'secondary' }} fs-5"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-0 fw-semibold">{{ schedule.name }}</h6>
+                        <small class="text-muted">{{ schedule.updated_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                    </div>
+                </div>
+                <span class="badge bg-{{ 'success' if schedule.is_active else 'secondary' }}-subtle text-{{ 'success' if schedule.is_active else 'secondary' }}">
+                    {{ 'Active' if schedule.is_active else 'Disabled' }}
+                </span>
+            </div>
+
+            <!-- Script Info -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-file-code text-muted me-2"></i>
+                    <span class="fw-medium">{{ schedule.script.name if schedule.script else 'Script not found' }}</span>
+                </div>
+                {% if schedule.description %}
+                <p class="text-muted small mb-0">{{ schedule.description[:80] }}{% if schedule.description|length > 80 %}...{% endif %}</p>
+                {% endif %}
+            </div>
+
+            <!-- Schedule Details -->
+            <div class="mb-3">
+                <div class="row g-2">
+                    <div class="col-12">
+                        <div class="bg-light p-2 rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-calendar-event text-primary me-2"></i>
+                                <div>
+                                    <div class="fw-semibold small">{{ schedule.frequency_display }}</div>
+                                    <div class="text-muted" style="font-size: 0.75rem;">{{ schedule.frequency.title() }} schedule</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Next Run -->
+            {% if schedule.is_active and schedule.next_run_time %}
+            <div class="mb-3">
+                <div class="d-flex align-items-center p-2 bg-info bg-opacity-10 rounded">
+                    <i class="bi bi-clock text-info me-2"></i>
+                    <div>
+                        <div class="fw-medium small">Next Run</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">
+                            {{ schedule.next_run_time.strftime('%d/%m/%Y %H:%M') }} ({{ schedule.next_run_display }})
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Last Execution -->
+            {% if schedule.last_execution %}
+            <div class="mb-3">
+                <div class="d-flex align-items-center p-2 bg-light rounded">
+                    <i class="bi bi-clock-history text-muted me-2"></i>
+                    <div>
+                        <div class="fw-medium small">Last Execution</div>
+                        <div class="text-muted d-flex align-items-center" style="font-size: 0.75rem;">
+                            <span class="badge bg-{{ schedule.last_execution.status_color }}-subtle text-{{ schedule.last_execution.status_color }} me-1" style="font-size: 0.65rem;">
+                                {{ schedule.last_execution.status.title() }}
+                            </span>
+                            {{ schedule.last_execution.started_at.strftime('%d/%m %H:%M') if schedule.last_execution.started_at else 'N/A' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="d-flex gap-2 mt-auto">
+                {% if schedule.is_active %}
+                <form method="POST" action="{{ url_for('run_schedule_now', schedule_id=schedule.id) }}" class="flex-fill">
+                    <button type="submit" class="btn btn-success btn-sm w-100">
+                        <i class="bi bi-play-fill me-1"></i>Run Now
+                    </button>
+                </form>
+                {% endif %}
+                
+                <form method="POST" action="{{ url_for('toggle_schedule', schedule_id=schedule.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-outline-{{ 'warning' if schedule.is_active else 'success' }} btn-sm">
+                        <i class="bi bi-{{ 'pause' if schedule.is_active else 'play' }}-fill"></i>
+                    </button>
+                </form>
+                
+                <a href="{{ url_for('edit_schedule', schedule_id=schedule.id) }}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-pencil"></i>
+                </a>
+                
+                <button class="btn btn-outline-danger btn-sm" onclick="confirmDelete('{{ schedule.id }}', '{{ schedule.name }}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Summary -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted small">
+                    Showing {{ schedules|length }} schedule{{ 's' if schedules|length != 1 else '' }}
+                </div>
+                <div class="d-flex gap-3">
+                    <span class="badge bg-success-subtle text-success">{{ stats.active }} Active</span>
+                    <span class="badge bg-secondary-subtle text-secondary">{{ stats.disabled }} Disabled</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Empty State -->
+<div class="row">
+    <div class="col-12">
+        <div class="modern-card text-center py-5">
+            <div class="text-muted mb-4">
+                <i class="bi bi-calendar-plus" style="font-size: 4rem;"></i>
+            </div>
+            <h5 class="mb-3">No schedules configured</h5>
+            <p class="text-muted mb-4">Create your first schedule to automate script execution at specific times or intervals</p>
+            <a href="{{ url_for('create_schedule') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>Create First Schedule
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block modals %}
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <i class="bi bi-calendar-x text-danger" style="font-size: 3rem;"></i>
+                </div>
+                <p class="text-center mb-3">
+                    Are you sure you want to delete the schedule <strong id="scheduleName"></strong>?
+                </p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-info-circle me-2"></i>
+                    This will permanently remove the schedule and stop all future automated executions.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" class="d-inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>Delete Schedule
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .modern-card {
+        transition: all 0.3s ease;
+    }
+    
+    .modern-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn {
+        transition: all 0.2s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+    }
+    
+    .bg-light {
+        background-color: hsl(210 40% 98%) !important;
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .bg-running {
+        background-color: #fd7e14 !important;
+    }
+    
+    .text-running {
+        color: #fd7e14 !important;
+    }
+    
+    .bg-running-subtle {
+        background-color: rgba(253, 126, 20, 0.1) !important;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete(scheduleId, scheduleName) {
+    document.getElementById('scheduleName').textContent = scheduleName;
+    document.getElementById('deleteForm').action = `/schedules/${scheduleId}/delete`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+
+function refreshSchedules() {
+    window.location.reload();
+}
+
+// Auto-refresh every 60 seconds to update "next run" times
+setInterval(() => {
+    // Update relative times without full page reload
+    updateRelativeTimes();
+}, 60000);
+
+function updateRelativeTimes() {
+    // This could be enhanced to update "next run" displays dynamically
+    // For now, we'll just reload if there are active schedules
+    const activeSchedules = document.querySelectorAll('.badge:contains("Active")').length;
+    if (activeSchedules > 0) {
+        // Could implement AJAX update here
+    }
+}
+</script>
+{% endblock %}

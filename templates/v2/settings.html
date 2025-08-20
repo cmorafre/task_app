@@ -1,0 +1,442 @@
+{% extends "v2/base.html" %}
+
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Configure and customize your ScriptFlow environment{% endblock %}
+
+{% block content %}
+<!-- Settings Grid -->
+<div class="row">
+    <!-- System Configuration -->
+    <div class="col-lg-6 mb-4">
+        <div class="modern-card h-100">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-gear-fill text-primary fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">System Configuration</h5>
+                    <p class="text-muted mb-0 small">Core system settings and preferences</p>
+                </div>
+            </div>
+
+            <div class="list-group list-group-flush">
+                <a href="{{ url_for('python_settings') }}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                    <div class="bg-warning bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-python text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Python Environment</div>
+                        <small class="text-muted">Configure Python interpreter and virtual environments</small>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </a>
+
+                <a href="{{ url_for('terminal') }}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                    <div class="bg-dark bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-terminal text-dark"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Web Terminal</div>
+                        <small class="text-muted">Execute commands and install packages</small>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </a>
+
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-info bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-speedometer2 text-info"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Performance</div>
+                        <small class="text-muted">Script execution limits and timeouts</small>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary">Coming Soon</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="col-lg-6 mb-4">
+        <div class="modern-card h-100">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-people-fill text-success fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">User Management</h5>
+                    <p class="text-muted mb-0 small">Manage users and permissions</p>
+                </div>
+            </div>
+
+            <div class="list-group list-group-flush">
+                {% if current_user.is_admin %}
+                <a href="{{ url_for('manage_users') }}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                    <div class="bg-primary bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-person-gear text-primary"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Manage Users</div>
+                        <small class="text-muted">Create, edit, and delete user accounts</small>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </a>
+
+                <a href="{{ url_for('create_user') }}" class="list-group-item list-group-item-action d-flex align-items-center p-3">
+                    <div class="bg-success bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-person-plus text-success"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Add New User</div>
+                        <small class="text-muted">Create a new user account</small>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </a>
+                {% else %}
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-secondary bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-lock text-secondary"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Admin Only</div>
+                        <small class="text-muted">User management requires admin privileges</small>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-warning bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-shield-check text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Security Settings</div>
+                        <small class="text-muted">Password policies and session management</small>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary">Coming Soon</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Information -->
+    <div class="col-lg-6 mb-4">
+        <div class="modern-card h-100">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-info-circle-fill text-info fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">System Information</h5>
+                    <p class="text-muted mb-0 small">View system status and diagnostics</p>
+                </div>
+            </div>
+
+            <div class="list-group list-group-flush">
+                <button class="list-group-item list-group-item-action d-flex align-items-center p-3" onclick="loadSystemInfo()">
+                    <div class="bg-primary bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-cpu text-primary"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">System Status</div>
+                        <small class="text-muted">View current system information</small>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted"></i>
+                </button>
+
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-success bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-check-circle text-success"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Health Check</div>
+                        <small class="text-muted">All systems operational</small>
+                    </div>
+                    <span class="badge bg-success-subtle text-success">
+                        <i class="bi bi-check-lg"></i>
+                    </span>
+                </div>
+
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-warning bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-graph-up text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Performance Metrics</div>
+                        <small class="text-muted">System usage and performance data</small>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary">Coming Soon</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Settings -->
+    <div class="col-lg-6 mb-4">
+        <div class="modern-card h-100">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-danger bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-sliders text-danger fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">Advanced Settings</h5>
+                    <p class="text-muted mb-0 small">Expert configuration options</p>
+                </div>
+            </div>
+
+            <div class="list-group list-group-flush">
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-danger bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-database text-danger"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Database Settings</div>
+                        <small class="text-muted">Database configuration and maintenance</small>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary">Coming Soon</span>
+                </div>
+
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-warning bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-cloud text-warning"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">Backup & Restore</div>
+                        <small class="text-muted">Backup scripts and restore data</small>
+                    </div>
+                    <span class="badge bg-secondary-subtle text-secondary">Coming Soon</span>
+                </div>
+
+                <div class="list-group-item d-flex align-items-center p-3">
+                    <div class="bg-info bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-palette text-info"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">UI Theme</div>
+                        <small class="text-muted">Customize interface appearance</small>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="themeSwitch" {{ 'checked' if is_modern_ui else '' }} onchange="toggleTheme()">
+                        <label class="form-check-label small" for="themeSwitch">
+                            Modern UI
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1 fw-semibold">Quick Actions</h5>
+                    <p class="text-muted mb-0 small">Common configuration tasks</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" onclick="exportSettings()">
+                        <i class="bi bi-download me-1"></i>Export Settings
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="importSettings()">
+                        <i class="bi bi-upload me-1"></i>Import Settings
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="resetSettings()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Defaults
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<!-- System Info Modal -->
+<div class="modal fade" id="systemInfoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-info-circle me-2"></i>System Information
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="systemInfoContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading system information...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .modern-card {
+        transition: all 0.3s ease;
+    }
+    
+    .modern-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .list-group-item {
+        border: none;
+        transition: all 0.2s ease;
+    }
+    
+    .list-group-item:hover {
+        background-color: hsl(210 40% 96%);
+        transform: translateX(5px);
+    }
+    
+    .list-group-item-action:hover {
+        background-color: hsl(210 40% 96%);
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .form-check-input:checked {
+        background-color: var(--primary);
+        border-color: var(--primary);
+    }
+    
+    .btn {
+        transition: all 0.2s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function loadSystemInfo() {
+    const modal = new bootstrap.Modal(document.getElementById('systemInfoModal'));
+    modal.show();
+    
+    fetch('/system/info')
+        .then(response => response.json())
+        .then(data => {
+            const content = document.getElementById('systemInfoContent');
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="fw-semibold mb-3">System</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td class="fw-medium">Platform:</td>
+                                    <td>${data.system.platform}</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-medium">Python Version:</td>
+                                    <td>${data.system.current_app_version.split(' ')[0]}</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-medium">Working Directory:</td>
+                                    <td><code>${data.system.cwd}</code></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-semibold mb-3">Configuration</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td class="fw-medium">Upload Folder:</td>
+                                    <td><code>${data.config.upload_folder}</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-medium">Max File Size:</td>
+                                    <td>${Math.round(data.config.max_content_length / (1024 * 1024))} MB</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-medium">Database:</td>
+                                    <td><code>${data.config.database_uri.includes('sqlite') ? 'SQLite' : 'Other'}</code></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <h6 class="fw-semibold mb-3">Python Configuration</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td class="fw-medium">Configured Executable:</td>
+                                    <td><code>${data.system.configured_python_executable}</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-medium">Resolved Path:</td>
+                                    <td><code>${data.system.resolved_python_path}</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-medium">Version:</td>
+                                    <td>${data.system.resolved_python_version}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            document.getElementById('systemInfoContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Error loading system information: ${error.message}
+                </div>
+            `;
+        });
+}
+
+function toggleTheme() {
+    const isChecked = document.getElementById('themeSwitch').checked;
+    const newVersion = isChecked ? 'v2' : 'v1';
+    window.location.href = `?ui=${newVersion}`;
+}
+
+function exportSettings() {
+    // Placeholder for export functionality
+    alert('Export settings functionality coming soon!');
+}
+
+function importSettings() {
+    // Placeholder for import functionality
+    alert('Import settings functionality coming soon!');
+}
+
+function resetSettings() {
+    if (confirm('Are you sure you want to reset all settings to defaults? This action cannot be undone.')) {
+        alert('Reset settings functionality coming soon!');
+    }
+}
+
+// Initialize theme switch based on current UI version
+document.addEventListener('DOMContentLoaded', function() {
+    const themeSwitch = document.getElementById('themeSwitch');
+    const currentVersion = '{{ ui_version }}';
+    themeSwitch.checked = currentVersion === 'v2';
+});
+</script>
+{% endblock %}

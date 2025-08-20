@@ -1,0 +1,410 @@
+{% extends "v2/base.html" %}
+
+{% block page_title %}Execution Logs{% endblock %}
+{% block page_subtitle %}Monitor script execution history and performance{% endblock %}
+
+{% block content %}
+<!-- Filters & Actions Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div>
+                        <h5 class="mb-1 fw-semibold">Execution Logs</h5>
+                        <p class="text-muted mb-0 small">Track script performance and troubleshoot issues</p>
+                    </div>
+                    
+                    <!-- Status Filters -->
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-secondary btn-sm filter-btn active" data-filter="all">
+                            All <span class="badge bg-secondary ms-1">{{ executions.total }}</span>
+                        </button>
+                        <button class="btn btn-outline-success btn-sm filter-btn" data-filter="completed">
+                            <i class="bi bi-check-circle me-1"></i>Success
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm filter-btn" data-filter="failed">
+                            <i class="bi bi-x-circle me-1"></i>Failed
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm filter-btn" data-filter="running">
+                            <i class="bi bi-arrow-repeat me-1"></i>Running
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshLogs()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="toggleAutoRefresh()">
+                        <i class="bi bi-lightning-charge me-1"></i>
+                        <span id="autoRefreshText">Auto-refresh</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execution Cards -->
+{% if executions.items %}
+<div class="row" id="executionsList">
+    {% for execution in executions.items %}
+    <div class="col-12 mb-3 execution-item" data-status="{{ execution.status }}">
+        <div class="modern-card">
+            <div class="row align-items-center">
+                <!-- Status & Icon -->
+                <div class="col-auto">
+                    <div class="status-indicator bg-{{ execution.status_color }} bg-opacity-10 p-3 rounded-circle">
+                        {% if execution.status == 'running' %}
+                            <div class="spinner-border spinner-border-sm text-{{ execution.status_color }}" role="status"></div>
+                        {% else %}
+                            <i class="bi bi-{{ {'completed': 'check-circle-fill', 'failed': 'x-circle-fill', 'timeout': 'clock-fill', 'cancelled': 'stop-circle-fill'}.get(execution.status, 'circle-fill') }} text-{{ execution.status_color }} fs-4"></i>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Execution Details -->
+                <div class="col">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="d-flex align-items-center mb-1">
+                                <h6 class="fw-semibold mb-0 me-2">
+                                    {{ execution.script.name if execution.script else 'Unknown Script' }}
+                                </h6>
+                                <span class="badge bg-{{ execution.status_color }}-subtle text-{{ execution.status_color }}">
+                                    {{ execution.status.title() }}
+                                </span>
+                                {% if execution.trigger_type != 'manual' %}
+                                <span class="badge bg-info-subtle text-info ms-1">
+                                    <i class="bi bi-robot me-1"></i>{{ execution.trigger_type.title() }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="text-muted small mb-2">
+                                <i class="bi bi-clock me-1"></i>
+                                Started: {{ execution.started_at.strftime('%d/%m/%Y %H:%M:%S') if execution.started_at else 'N/A' }}
+                                {% if execution.completed_at %}
+                                | Finished: {{ execution.completed_at.strftime('%H:%M:%S') }}
+                                {% endif %}
+                            </div>
+
+                            <!-- Progress for running executions -->
+                            {% if execution.status == 'running' %}
+                            <div class="progress mb-2" style="height: 4px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-{{ execution.status_color }}" style="width: 100%"></div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Metrics -->
+                        <div class="col-md-4">
+                            <div class="row g-2 text-center">
+                                <div class="col-4">
+                                    <div class="p-2 bg-light rounded">
+                                        <div class="fw-semibold small">{{ execution.formatted_duration }}</div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">Duration</div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 bg-light rounded">
+                                        <div class="fw-semibold small">{{ execution.exit_code if execution.exit_code is not none else '--' }}</div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">Exit Code</div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 bg-light rounded">
+                                        <div class="fw-semibold small">
+                                            {% if execution.stdout %}
+                                                <i class="bi bi-file-text text-success"></i>
+                                            {% elif execution.stderr %}
+                                                <i class="bi bi-exclamation-triangle text-warning"></i>
+                                            {% else %}
+                                                <i class="bi bi-dash text-muted"></i>
+                                            {% endif %}
+                                        </div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">Output</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Output Preview -->
+                    {% if execution.stdout or execution.stderr %}
+                    <div class="mt-3">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="toggleOutput('{{ execution.id }}')">
+                            <i class="bi bi-eye me-1"></i>Preview Output
+                        </button>
+                        <div id="output-{{ execution.id }}" class="collapse mt-2">
+                            <div class="bg-dark text-light p-3 rounded" style="font-family: 'Monaco', 'Courier New', monospace; font-size: 0.85rem; max-height: 200px; overflow-y: auto;">
+                                {% if execution.stdout %}
+                                <div class="text-success mb-2">
+                                    <strong>STDOUT:</strong>
+                                </div>
+                                <pre class="mb-2">{{ execution.stdout[:500] }}{% if execution.stdout|length > 500 %}...{% endif %}</pre>
+                                {% endif %}
+                                
+                                {% if execution.stderr %}
+                                <div class="text-danger mb-2">
+                                    <strong>STDERR:</strong>
+                                </div>
+                                <pre class="mb-0 text-warning">{{ execution.stderr[:500] }}{% if execution.stderr|length > 500 %}...{% endif %}</pre>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Actions -->
+                <div class="col-auto">
+                    <div class="d-flex flex-column gap-2">
+                        <a href="{{ url_for('view_execution', execution_id=execution.id) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        
+                        {% if execution.status in ['pending', 'running'] %}
+                        <button class="btn btn-outline-danger btn-sm" onclick="stopExecution('{{ execution.id }}')">
+                            <i class="bi bi-stop-fill"></i>
+                        </button>
+                        {% else %}
+                        <button class="btn btn-outline-secondary btn-sm" onclick="rerunScript('{{ execution.script_id if execution.script else '' }}')">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if executions.pages > 1 %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <nav>
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    {% if executions.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('logs', page=executions.prev_num) }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in executions.iter_pages() %}
+                        {% if page_num %}
+                            {% if page_num != executions.page %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('logs', page=page_num) }}">{{ page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if executions.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('logs', page=executions.next_num) }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            
+            <div class="text-center text-muted small mt-2">
+                Showing {{ executions.items|length }} of {{ executions.total }} executions (Page {{ executions.page }} of {{ executions.pages }})
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<!-- Empty State -->
+<div class="row">
+    <div class="col-12">
+        <div class="modern-card text-center py-5">
+            <div class="text-muted mb-4">
+                <i class="bi bi-clock-history" style="font-size: 4rem;"></i>
+            </div>
+            <h5 class="mb-3">No execution logs yet</h5>
+            <p class="text-muted mb-4">Execute some scripts to see their logs and performance metrics here</p>
+            <a href="{{ url_for('scripts') }}" class="btn btn-primary">
+                <i class="bi bi-play-circle me-2"></i>Execute Scripts
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .modern-card {
+        transition: all 0.3s ease;
+    }
+    
+    .execution-item .modern-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .status-indicator {
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .filter-btn.active {
+        background-color: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    .bg-light {
+        background-color: hsl(210 40% 98%) !important;
+    }
+    
+    .progress {
+        border-radius: 10px;
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .bg-running {
+        background-color: #fd7e14 !important;
+    }
+    
+    .text-running {
+        color: #fd7e14 !important;
+    }
+    
+    .bg-running-subtle {
+        background-color: rgba(253, 126, 20, 0.1) !important;
+    }
+    
+    .execution-item {
+        transition: opacity 0.3s ease;
+    }
+    
+    .execution-item.filtered-out {
+        display: none;
+    }
+    
+    pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        margin: 0;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let autoRefreshEnabled = false;
+let autoRefreshInterval;
+
+function refreshLogs() {
+    window.location.reload();
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    const text = document.getElementById('autoRefreshText');
+    
+    if (autoRefreshEnabled) {
+        text.textContent = 'Auto-refresh ON';
+        autoRefreshInterval = setInterval(refreshLogs, 5000); // 5 seconds
+    } else {
+        text.textContent = 'Auto-refresh';
+        clearInterval(autoRefreshInterval);
+    }
+}
+
+function toggleOutput(executionId) {
+    const outputDiv = document.getElementById(`output-${executionId}`);
+    const collapse = new bootstrap.Collapse(outputDiv);
+    collapse.toggle();
+}
+
+function stopExecution(executionId) {
+    if (confirm('Are you sure you want to stop this execution?')) {
+        fetch(`/api/execution/${executionId}/stop`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                setTimeout(refreshLogs, 1000); // Refresh after 1 second
+            } else {
+                alert('Failed to stop execution: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while stopping the execution.');
+        });
+    }
+}
+
+function rerunScript(scriptId) {
+    if (scriptId && confirm('Run this script again?')) {
+        window.location.href = `/scripts/${scriptId}/execute`;
+    }
+}
+
+// Filter functionality
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        // Update active filter button
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        const filter = this.dataset.filter;
+        const items = document.querySelectorAll('.execution-item');
+        
+        items.forEach(item => {
+            if (filter === 'all' || item.dataset.status === filter) {
+                item.classList.remove('filtered-out');
+            } else {
+                item.classList.add('filtered-out');
+            }
+        });
+    });
+});
+
+// Auto-refresh for running executions
+function checkRunningExecutions() {
+    const runningItems = document.querySelectorAll('[data-status="running"], [data-status="pending"]');
+    if (runningItems.length > 0 && !autoRefreshEnabled) {
+        // Auto-enable refresh if there are running executions
+        toggleAutoRefresh();
+    }
+}
+
+// Check on page load
+document.addEventListener('DOMContentLoaded', checkRunningExecutions);
+</script>
+{% endblock %}
