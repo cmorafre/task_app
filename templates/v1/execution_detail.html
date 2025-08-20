@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}Execution Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .log-output { 
+        background-color: #2d3748; 
+        color: #e2e8f0; 
+        padding: 1rem; 
+        border-radius: 6px; 
+        font-family: Monaco, monospace; 
+        font-size: 0.875rem; 
+        max-height: 400px; 
+        overflow-y: auto; 
+        white-space: pre-wrap; 
+    }
+    .status-success { color: #27AE60; }
+    .status-warning { color: #F39C12; }
+    .status-danger { color: #E74C3C; }
+    .status-secondary { color: #6c757d; }
+    
+    /* Animação para status running */
+    .status-running {
+        color: #007bff;
+        animation: pulse 1.5s infinite;
+    }
+    
+    .status-running .bi-arrow-clockwise {
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    
+    .executing-banner {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        color: white;
+        padding: 10px;
+        text-align: center;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        animation: pulse 2s infinite;
+    }
+    
+    .refresh-indicator {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: #28a745;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        z-index: 1000;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Indicador de refresh -->
+<div class="refresh-indicator" id="refreshIndicator">
+    <i class="bi bi-arrow-clockwise me-1"></i>Auto-refreshing...
+</div>
+        <!-- Banner de execução ativa -->
+        {% if execution.status in ['pending', 'running'] %}
+        <div class="executing-banner">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>
+                        <i class="bi bi-play-circle-fill me-2"></i>
+                        {% if execution.status == 'pending' %}
+                            Script is starting...
+                        {% else %}
+                            Script is running...
+                        {% endif %}
+                    </strong>
+                    <small class="d-block mt-1">This page will refresh automatically every 3 seconds</small>
+                </div>
+                <button 
+                    class="btn btn-danger btn-sm" 
+                    id="stopExecutionBtn"
+                    onclick="stopExecution()"
+                    title="Stop this execution">
+                    <i class="bi bi-stop-circle-fill me-1"></i>Stop
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ url_for('logs') }}">Logs</a></li>
+                        <li class="breadcrumb-item active">Execution #{{ execution.id }}</li>
+                    </ol>
+                </nav>
+                <h1><i class="bi bi-file-play me-2"></i>Execution Details</h1>
+            </div>
+        </div>
+
+        <!-- Execution Info -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{{ execution.script.name if execution.script else 'Unknown Script' }}</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Status:</strong> 
+                            <span class="status-{{ execution.status_color }}">
+                                {{ execution.status_icon }} {{ execution.status|title }}
+                            </span>
+                        </p>
+                        <p><strong>Started:</strong> {{ execution.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                        {% if execution.completed_at %}
+                            <p><strong>Completed:</strong> {{ execution.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                        {% endif %}
+                        <p><strong>Duration:</strong> <span data-duration>{{ execution.formatted_duration }}</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        {% if execution.exit_code is not none %}
+                            <p><strong>Exit Code:</strong> 
+                                <span class="badge bg-{{ 'success' if execution.exit_code == 0 else 'danger' }}">
+                                    {{ execution.exit_code }}
+                                </span>
+                            </p>
+                        {% endif %}
+                        {% if execution.script %}
+                            <p><strong>Script Type:</strong> {{ execution.script.script_type.upper() }}</p>
+                            <p><strong>Script Size:</strong> {{ (execution.script.file_size / 1024)|round(1) }} KB</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output -->
+        {% if execution.stdout %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Standard Output</h5>
+                </div>
+                <div class="card-body">
+                    <div class="log-output">{{ execution.stdout }}</div>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if execution.stderr %}
+            <div class="card mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Error Output</h5>
+                </div>
+                <div class="card-body">
+                    <div class="log-output">{{ execution.stderr }}</div>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if not execution.stdout and not execution.stderr %}
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-info-circle text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 text-muted">No Output</h5>
+                    <p class="text-muted">This execution produced no output.</p>
+                </div>
+            </div>
+        {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh para execuções em andamento
+    const executionId = {{ execution.id }};
+    let isRunning = {{ 'true' if execution.status in ['pending', 'running'] else 'false' }};
+    let refreshInterval;
+    
+    function showRefreshIndicator() {
+        document.getElementById('refreshIndicator').style.display = 'block';
+    }
+    
+    function hideRefreshIndicator() {
+        document.getElementById('refreshIndicator').style.display = 'none';
+    }
+    
+    function updateExecutionStatus() {
+        fetch(`/api/execution/${executionId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                // Atualizar elementos da página sem recarregar completamente
+                if (data.is_running !== isRunning) {
+                    // Status mudou, recarregar página para mostrar resultados
+                    location.reload();
+                    return;
+                }
+                
+                // Atualizar duração se ainda está rodando
+                if (data.is_running && data.duration) {
+                    const durationElements = document.querySelectorAll('[data-duration]');
+                    durationElements.forEach(el => {
+                        el.textContent = data.duration;
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao verificar status:', error);
+                // Em caso de erro, tentar recarregar a página
+                setTimeout(() => location.reload(), 5000);
+            });
+    }
+    
+    function startAutoRefresh() {
+        if (isRunning) {
+            showRefreshIndicator();
+            // Verificar status via AJAX a cada 2 segundos
+            refreshInterval = setInterval(updateExecutionStatus, 2000);
+            
+            // Fallback: recarregar página completamente a cada 15 segundos
+            setTimeout(() => {
+                if (isRunning) {
+                    location.reload();
+                }
+            }, 15000);
+        }
+    }
+    
+    function stopAutoRefresh() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            hideRefreshIndicator();
+        }
+    }
+    
+    function stopExecution() {
+        const btn = document.getElementById('stopExecutionBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-clock me-1"></i>Stopping...';
+        }
+        
+        fetch(`/api/execution/${executionId}/stop`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Parar auto-refresh e recarregar página para mostrar status atualizado
+                stopAutoRefresh();
+                location.reload();
+            } else {
+                alert('Erro ao parar execução: ' + data.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-stop-circle-fill me-1"></i>Stop';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao parar execução:', error);
+            alert('Erro ao comunicar com servidor');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-stop-circle-fill me-1"></i>Stop';
+            }
+        });
+    }
+    
+    // Iniciar auto-refresh quando página carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        startAutoRefresh();
+        
+        // Parar refresh quando usuário sair da página
+        window.addEventListener('beforeunload', stopAutoRefresh);
+    });
+    
+    // Botão manual de refresh
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+            stopAutoRefresh();
+        }
+    });
+</script>
+{% endblock %}

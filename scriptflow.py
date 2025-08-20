@@ -7,7 +7,7 @@ Sistema de automação de scripts Python e Batch
 import os
 import socket
 import time
-from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, abort
+from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, abort, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -21,6 +21,9 @@ from functools import wraps
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
 import atexit
+
+# Import UI Version Manager
+from config.ui_version import UIVersionManager
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -443,7 +446,7 @@ def login():
         
         if not username or not password:
             flash('Please enter both username and password.', 'error')
-            return render_template('login.html')
+            return render_template(UIVersionManager.get_template_path('login.html'))
         
         user = User.query.filter_by(username=username).first()
         
@@ -455,7 +458,7 @@ def login():
         else:
             flash('Invalid username or password.', 'error')
     
-    return render_template('login.html')
+    return render_template(UIVersionManager.get_template_path('login.html'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -747,7 +750,7 @@ def dashboard():
         'running_count': len(running_processes)
     }
     
-    return render_template('dashboard.html',
+    return render_template(UIVersionManager.get_template_path('dashboard.html'),
                          scripts=user_scripts,
                          recent_executions=recent_executions,
                          stats=stats)
@@ -757,7 +760,7 @@ def dashboard():
 def scripts():
     scripts_query = Script.query.filter_by(is_active=True).order_by(Script.updated_at.desc())
     user_scripts = apply_user_data_filter(scripts_query).all()
-    return render_template('scripts.html', scripts=user_scripts)
+    return render_template(UIVersionManager.get_template_path('scripts.html'), scripts=user_scripts)
 
 @app.route('/scripts/upload', methods=['GET', 'POST'])
 @login_required
@@ -1042,7 +1045,7 @@ def logs():
     executions_filtered = apply_user_data_filter(executions_query)
     executions = executions_filtered.paginate(page=page, per_page=20, error_out=False)
     
-    return render_template('logs.html', executions=executions)
+    return render_template(UIVersionManager.get_template_path('logs.html'), executions=executions)
 
 @app.route('/logs/<int:execution_id>')
 @login_required
@@ -1185,7 +1188,7 @@ def system_info():
 @login_required
 def settings():
     """Settings configuration page"""
-    return render_template('settings.html')
+    return render_template(UIVersionManager.get_template_path('settings.html'))
 
 def detect_python_interpreters():
     """Detect available Python interpreters on the system"""
@@ -1274,7 +1277,7 @@ def schedules():
         'avg_per_day': 0  # TODO: Calculate based on execution history
     }
     
-    return render_template('schedules.html', schedules=user_schedules, stats=stats)
+    return render_template(UIVersionManager.get_template_path('schedules.html'), schedules=user_schedules, stats=stats)
 
 @app.route('/schedules/create', methods=['GET', 'POST'])
 @login_required
@@ -1784,6 +1787,31 @@ def modern_users_preview():
 def modern_settings_preview():
     """Preview of modern UI design - Settings"""
     return render_template('modern_preview_settings.html')
+
+@app.route('/ui/toggle')
+@login_required
+def toggle_ui_version():
+    """Toggle between UI versions"""
+    new_version = UIVersionManager.toggle_version()
+    flash(f'Switched to UI version {new_version}', 'info')
+    return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/ui/test')
+@login_required
+def test_ui_version():
+    """Test UI version management"""
+    current_version = UIVersionManager.get_ui_version()
+    is_modern = UIVersionManager.is_modern_ui()
+    template_path = UIVersionManager.get_template_path('dashboard.html')
+    
+    return jsonify({
+        'current_version': current_version,
+        'is_modern_ui': is_modern,
+        'template_path': template_path,
+        'url_params': dict(request.args),
+        'session_version': session.get('ui_version'),
+        'env_version': os.environ.get('UI_VERSION')
+    })
 
 # Templates removed - now using separate .html files
 

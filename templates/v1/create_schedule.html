@@ -1,0 +1,689 @@
+{% extends "base.html" %}
+
+{% block title %}Create Schedule - ScriptFlow{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Script search dropdown styles */
+    .script-search-container {
+        position: relative;
+    }
+    
+    .script-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+    }
+    
+    .script-dropdown.show {
+        display: block;
+    }
+    
+    .script-option {
+        cursor: pointer;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.2s ease;
+    }
+    
+    .script-option:last-child {
+        border-bottom: none;
+    }
+    
+    .script-option:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .script-option:active {
+        background-color: #e9ecef;
+    }
+    
+    .script-option.filtered-out {
+        display: none !important;
+    }
+    
+    /* Quick start buttons */
+    .btn-outline-secondary.btn-sm {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* Search input highlight */
+    .form-control:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    /* Success feedback when script is selected */
+    .form-control.is-valid {
+        border-color: #198754;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%23198754' d='m2.3 6.73.94-.94L4.15 7.1l.94-.94L6.7 7.7l-.94.94-1.61-1.61-.94.94z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right calc(0.375em + 0.1875rem) center;
+        background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+    }
+    
+    /* Empty state styling */
+    .empty-state {
+        font-style: italic;
+        color: #6c757d !important;
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-0">Create New Schedule</h1>
+                    <p class="text-muted">Set up automated script execution</p>
+                </div>
+                <a href="{{ url_for('schedules') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Schedules
+                </a>
+            </div>
+
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-body">
+                            <form method="POST">
+                                <!-- Basic Settings -->
+                                <div class="mb-4">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-gear me-2"></i>Basic Settings
+                                    </h5>
+                                    <hr>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="script_id" class="form-label">Script *</label>
+                                            <div class="script-search-container">
+                                                <input type="text" class="form-control" id="script_search" 
+                                                       placeholder="Type to search scripts..." 
+                                                       autocomplete="off">
+                                                <input type="hidden" id="script_id" name="script_id" required>
+                                                <div id="script_dropdown" class="script-dropdown">
+                                                    {% for script in scripts %}
+                                                    <div class="script-option" data-value="{{ script.id }}"
+                                                         data-name="{{ script.name.lower() }}"
+                                                         data-type="{{ script.script_type.lower() }}">
+                                                        <span class="badge bg-info me-2">{{ script.script_type.upper() }}</span>
+                                                        <strong>{{ script.name }}</strong>
+                                                        {% if script.description %}
+                                                        <br><small class="text-muted">{{ script.description[:80] }}{% if script.description|length > 80 %}...{% endif %}</small>
+                                                        {% endif %}
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="name" class="form-label">Schedule Name *</label>
+                                            <input type="text" class="form-control" id="name" name="name" 
+                                                   placeholder="e.g., Daily Backup" required>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="description" name="description" rows="3"
+                                              placeholder="Optional description of what this schedule does..."></textarea>
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                                        <label class="form-check-label" for="is_active">
+                                            <strong>Active Schedule</strong>
+                                            <small class="d-block text-muted">Enable this schedule to run automatically</small>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Schedule Pattern -->
+                                <div class="mb-4">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-calendar3 me-2"></i>Schedule Pattern
+                                    </h5>
+                                    <hr>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Frequency *</label>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="frequency" 
+                                                       id="frequency_daily" value="daily" checked>
+                                                <label class="form-check-label" for="frequency_daily">
+                                                    <i class="bi bi-calendar-day me-1"></i>Daily
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="frequency" 
+                                                       id="frequency_weekly" value="weekly">
+                                                <label class="form-check-label" for="frequency_weekly">
+                                                    <i class="bi bi-calendar-week me-1"></i>Weekly
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="frequency" 
+                                                       id="frequency_monthly" value="monthly">
+                                                <label class="form-check-label" for="frequency_monthly">
+                                                    <i class="bi bi-calendar-month me-1"></i>Monthly
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="frequency" 
+                                                       id="frequency_interval" value="interval">
+                                                <label class="form-check-label" for="frequency_interval">
+                                                    <i class="bi bi-clock me-1"></i>Interval
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label for="time" class="form-label">Time *</label>
+                                            <input type="time" class="form-control" id="time" name="time" value="09:00" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label for="start_date" class="form-label">Start Date</label>
+                                            <input type="date" class="form-control" id="start_date" name="start_date">
+                                            <small class="text-muted">Leave empty to start today</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Quick Start</label>
+                                            <div>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="setStartDate('today')">Today</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="setStartDate('tomorrow')">Tomorrow</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setStartDate('next_week')">Next Week</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Weekly Options -->
+                                <div id="weekly_options" class="mb-3" style="display: none;">
+                                    <label class="form-label">Days of Week *</label>
+                                    <div class="row">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="monday" id="day_monday" checked>
+                                                <label class="form-check-label" for="day_monday">Mon</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="tuesday" id="day_tuesday">
+                                                <label class="form-check-label" for="day_tuesday">Tue</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="wednesday" id="day_wednesday">
+                                                <label class="form-check-label" for="day_wednesday">Wed</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="thursday" id="day_thursday">
+                                                <label class="form-check-label" for="day_thursday">Thu</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="friday" id="day_friday">
+                                                <label class="form-check-label" for="day_friday">Fri</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="saturday" id="day_saturday">
+                                                <label class="form-check-label" for="day_saturday">Sat</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="days" 
+                                                       value="sunday" id="day_sunday">
+                                                <label class="form-check-label" for="day_sunday">Sun</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Monthly Options -->
+                                <div id="monthly_options" class="mb-3" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="day" class="form-label">Day of Month *</label>
+                                            <input type="number" class="form-control" id="day" name="day" 
+                                                   value="1" min="1" max="28">
+                                            <small class="text-muted">Day 1-28 (to avoid month-end issues)</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Interval Options -->
+                                <div id="interval_options" class="mb-3" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="interval_minutes" class="form-label">Interval *</label>
+                                            <select class="form-control" id="interval_minutes" name="interval_minutes">
+                                                <option value="1">Every 1 minute</option>
+                                                <option value="5">Every 5 minutes</option>
+                                                <option value="10">Every 10 minutes</option>
+                                                <option value="15" selected>Every 15 minutes</option>
+                                                <option value="20">Every 20 minutes</option>
+                                                <option value="25">Every 25 minutes</option>
+                                                <option value="30">Every 30 minutes</option>
+                                                <option value="35">Every 35 minutes</option>
+                                                <option value="40">Every 40 minutes</option>
+                                                <option value="45">Every 45 minutes</option>
+                                                <option value="50">Every 50 minutes</option>
+                                                <option value="55">Every 55 minutes</option>
+                                                <option value="60">Every 1 hour</option>
+                                            </select>
+                                            <small class="text-muted">Script will run continuously at this interval</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Preview Section -->
+                                <div class="mb-4">
+                                    <div class="alert alert-info">
+                                        <h6 class="alert-heading">
+                                            <i class="bi bi-info-circle me-2"></i>Schedule Preview
+                                        </h6>
+                                        <p class="mb-0" id="schedule_preview">
+                                            This schedule will run daily at 09:00
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Form Actions -->
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-calendar-plus me-2"></i>Create Schedule
+                                    </button>
+                                    <a href="{{ url_for('schedules') }}" class="btn btn-outline-secondary">
+                                        Cancel
+                                    </a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle frequency changes
+document.addEventListener('change', function(e) {
+    if (e.target.name === 'frequency') {
+        updateFrequencyOptions();
+        updatePreview();
+    }
+    if (e.target.name === 'days' || e.target.name === 'time' || e.target.id === 'day' || e.target.id === 'start_date' || e.target.id === 'interval_minutes') {
+        updatePreview();
+    }
+});
+
+// Script search functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('script_search');
+    const dropdown = document.getElementById('script_dropdown');
+    const hiddenInput = document.getElementById('script_id');
+    const options = document.querySelectorAll('.script-option');
+    
+    let selectedValue = '';
+    let selectedText = '';
+    
+    // Show all scripts on focus
+    searchInput.addEventListener('focus', function() {
+        showDropdown();
+        if (!this.value) {
+            resetFilter();
+        }
+    });
+    
+    // Filter scripts as user types
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        
+        // Clear selection if user is typing
+        if (this.value !== selectedText) {
+            selectedValue = '';
+            hiddenInput.value = '';
+        }
+        
+        filterOptions(query);
+        showDropdown();
+    });
+    
+    // Handle script selection
+    options.forEach(option => {
+        option.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const value = this.dataset.value;
+            const scriptName = this.querySelector('strong').textContent;
+            const scriptType = this.dataset.type.toUpperCase();
+            
+            // Update values
+            selectedValue = value;
+            selectedText = `[${scriptType}] ${scriptName}`;
+            
+            searchInput.value = selectedText;
+            hiddenInput.value = value;
+            
+            hideDropdown();
+            updateScheduleName(scriptName);
+            
+            // Visual feedback
+            searchInput.classList.add('is-valid');
+            setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        const container = searchInput.closest('.script-search-container');
+        if (!container.contains(e.target)) {
+            hideDropdown();
+        }
+    });
+    
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', function(e) {
+        const visibleOptions = Array.from(options).filter(opt => !opt.classList.contains('filtered-out'));
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (visibleOptions.length > 0) {
+                visibleOptions[0].focus();
+            }
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+    
+    function filterOptions(query) {
+        let hasVisibleOptions = false;
+        
+        options.forEach(option => {
+            const name = option.dataset.name;
+            const type = option.dataset.type;
+            const description = option.textContent.toLowerCase();
+            
+            // Search in name, type, and description
+            const matches = !query || 
+                           name.includes(query) || 
+                           type.includes(query) || 
+                           description.includes(query);
+            
+            if (matches) {
+                option.classList.remove('filtered-out');
+                hasVisibleOptions = true;
+            } else {
+                option.classList.add('filtered-out');
+            }
+        });
+        
+        // Show "no results" message if no options match
+        updateEmptyState(!hasVisibleOptions, query);
+    }
+    
+    function resetFilter() {
+        options.forEach(option => {
+            option.classList.remove('filtered-out');
+        });
+        updateEmptyState(false);
+    }
+    
+    function showDropdown() {
+        dropdown.classList.add('show');
+    }
+    
+    function hideDropdown() {
+        dropdown.classList.remove('show');
+    }
+    
+    function updateEmptyState(isEmpty, query = '') {
+        let emptyMsg = dropdown.querySelector('.empty-state');
+        
+        if (isEmpty) {
+            if (!emptyMsg) {
+                emptyMsg = document.createElement('div');
+                emptyMsg.className = 'empty-state script-option text-center text-muted';
+                emptyMsg.innerHTML = `
+                    <i class="bi bi-search me-2"></i>
+                    No scripts found${query ? ` for "${query}"` : ''}
+                `;
+                dropdown.appendChild(emptyMsg);
+            }
+            emptyMsg.style.display = 'block';
+        } else if (emptyMsg) {
+            emptyMsg.style.display = 'none';
+        }
+    }
+    
+    function updateScheduleName(scriptName) {
+        const nameField = document.getElementById('name');
+        if (!nameField.value && scriptName) {
+            const frequency = document.querySelector('input[name="frequency"]:checked').value;
+            const frequencyName = frequency.charAt(0).toUpperCase() + frequency.slice(1);
+            nameField.value = `${frequencyName} ${scriptName}`;
+        }
+    }
+    
+    // Initialize
+    resetFilter();
+});
+
+// Start date helper functions
+function setStartDate(type) {
+    const startDateField = document.getElementById('start_date');
+    const today = new Date();
+    
+    function formatDateForInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    switch(type) {
+        case 'today':
+            startDateField.value = formatDateForInput(today);
+            break;
+        case 'tomorrow':
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            startDateField.value = formatDateForInput(tomorrow);
+            break;
+        case 'next_week':
+            const nextWeek = new Date(today);
+            nextWeek.setDate(today.getDate() + 7);
+            startDateField.value = formatDateForInput(nextWeek);
+            break;
+    }
+    updatePreview();
+}
+
+function updateFrequencyOptions() {
+    const frequency = document.querySelector('input[name="frequency"]:checked').value;
+    const weeklyOptions = document.getElementById('weekly_options');
+    const monthlyOptions = document.getElementById('monthly_options');
+    const intervalOptions = document.getElementById('interval_options');
+    const timeField = document.getElementById('time').closest('.mb-3');
+    const startDateField = document.getElementById('start_date').closest('.mb-3');
+    
+    // Hide all frequency-specific options
+    weeklyOptions.style.display = 'none';
+    monthlyOptions.style.display = 'none';
+    intervalOptions.style.display = 'none';
+    
+    // Show relevant options and hide/show time fields
+    if (frequency === 'weekly') {
+        weeklyOptions.style.display = 'block';
+        timeField.style.display = 'block';
+        startDateField.style.display = 'block';
+    } else if (frequency === 'monthly') {
+        monthlyOptions.style.display = 'block';
+        timeField.style.display = 'block';
+        startDateField.style.display = 'block';
+    } else if (frequency === 'interval') {
+        intervalOptions.style.display = 'block';
+        timeField.style.display = 'block'; // Show time field for intervals - user needs to specify start time
+        startDateField.style.display = 'block';
+    } else {
+        // Daily frequency
+        timeField.style.display = 'block';
+        startDateField.style.display = 'block';
+    }
+}
+
+function updatePreview() {
+    const frequency = document.querySelector('input[name="frequency"]:checked').value;
+    const time = document.getElementById('time').value;
+    const startDate = document.getElementById('start_date').value;
+    const preview = document.getElementById('schedule_preview');
+    
+    let previewText = '';
+    let startText = '';
+    
+    // Add start date info if specified
+    if (startDate) {
+        const startDateObj = new Date(startDate + 'T00:00:00'); // Force local timezone
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        
+        // Get date strings in YYYY-MM-DD format for comparison
+        const todayStr = today.getFullYear() + '-' + 
+                        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(today.getDate()).padStart(2, '0');
+        const tomorrowStr = tomorrow.getFullYear() + '-' + 
+                           String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(tomorrow.getDate()).padStart(2, '0');
+        
+        if (startDate === todayStr) {
+            startText = ' starting today';
+        } else if (startDate === tomorrowStr) {
+            startText = ' starting tomorrow';
+        } else {
+            // Format date as DD/MM/YYYY for display
+            const day = String(startDateObj.getDate()).padStart(2, '0');
+            const month = String(startDateObj.getMonth() + 1).padStart(2, '0');
+            const year = startDateObj.getFullYear();
+            startText = ` starting ${day}/${month}/${year}`;
+        }
+    }
+    
+    if (frequency === 'daily') {
+        previewText = `This schedule will run daily at ${time}${startText}`;
+    } else if (frequency === 'weekly') {
+        const checkedDays = Array.from(document.querySelectorAll('input[name="days"]:checked'))
+            .map(cb => cb.value)
+            .map(day => day.charAt(0).toUpperCase() + day.slice(1));
+        
+        if (checkedDays.length === 0) {
+            previewText = `Please select at least one day of the week`;
+        } else if (checkedDays.length === 1) {
+            previewText = `This schedule will run every ${checkedDays[0]} at ${time}${startText}`;
+        } else {
+            previewText = `This schedule will run on ${checkedDays.join(', ')} at ${time}${startText}`;
+        }
+    } else if (frequency === 'monthly') {
+        const day = document.getElementById('day').value || '1';
+        const suffix = getDaySuffix(day);
+        previewText = `This schedule will run on the ${day}${suffix} of each month at ${time}${startText}`;
+    } else if (frequency === 'interval') {
+        const intervalMinutes = document.getElementById('interval_minutes').value || '15';
+        let intervalText = '';
+        if (intervalMinutes === '60') {
+            intervalText = 'every hour';
+        } else {
+            intervalText = `every ${intervalMinutes} minutes`;
+        }
+        
+        let timeText = '';
+        if (startDate || time !== '09:00') {
+            timeText = ` beginning at ${time}`;
+        }
+        
+        previewText = `This schedule will run ${intervalText}${timeText}${startText}`;
+    }
+    
+    preview.textContent = previewText;
+}
+
+function getDaySuffix(day) {
+    const j = day % 10;
+    const k = day % 100;
+    
+    if (j == 1 && k != 11) {
+        return 'st';
+    }
+    if (j == 2 && k != 12) {
+        return 'nd';
+    }
+    if (j == 3 && k != 13) {
+        return 'rd';
+    }
+    return 'th';
+}
+
+// Note: Schedule name auto-population is now handled in the script search functionality above
+
+// Initialize preview on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateFrequencyOptions();
+    updatePreview();
+});
+</script>
+{% endblock %}
