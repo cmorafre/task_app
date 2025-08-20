@@ -250,12 +250,16 @@ def build_schedule_config(frequency, form_data):
     config = {}
     
     if frequency == ScheduleFrequency.DAILY.value:
-        time = form_data.get('daily_time', '00:00')
+        time = form_data.get('time', '00:00')
+        start_date = form_data.get('start_date', '')
         config['time'] = time
+        if start_date:
+            config['start_date'] = start_date
         
     elif frequency == ScheduleFrequency.WEEKLY.value:
-        time = form_data.get('weekly_time', '00:00')
-        days = form_data.getlist('weekly_days')
+        time = form_data.get('time', '00:00')
+        start_date = form_data.get('start_date', '')
+        days = form_data.getlist('days')
         
         # Validate days
         valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -266,10 +270,13 @@ def build_schedule_config(frequency, form_data):
         
         config['time'] = time
         config['days'] = selected_days
+        if start_date:
+            config['start_date'] = start_date
         
     elif frequency == ScheduleFrequency.MONTHLY.value:
-        time = form_data.get('monthly_time', '00:00')
-        day = int(form_data.get('monthly_day', 1))
+        time = form_data.get('time', '00:00')
+        start_date = form_data.get('start_date', '')
+        day = int(form_data.get('day', 1))
         
         # Validate day (1-31)
         if day < 1 or day > 31:
@@ -277,6 +284,26 @@ def build_schedule_config(frequency, form_data):
         
         config['time'] = time
         config['day'] = day
+        if start_date:
+            config['start_date'] = start_date
+        
+    elif frequency == ScheduleFrequency.INTERVAL.value:
+        interval_minutes = form_data.get('interval_minutes', '15')
+        time = form_data.get('time', '09:00')
+        start_date = form_data.get('start_date', '')
+        
+        # Validate interval minutes
+        try:
+            interval_minutes = int(interval_minutes)
+            if interval_minutes <= 0:
+                interval_minutes = 15
+        except (ValueError, TypeError):
+            interval_minutes = 15
+        
+        config['interval_minutes'] = interval_minutes
+        config['time'] = time
+        if start_date:
+            config['start_date'] = start_date
     
     # Hourly doesn't need additional config
     

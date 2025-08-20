@@ -196,6 +196,15 @@
                                                 </label>
                                             </div>
                                         </div>
+                                        <div class="col-md-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="frequency" 
+                                                       id="frequency_interval" value="interval">
+                                                <label class="form-check-label" for="frequency_interval">
+                                                    <i class="bi bi-clock me-1"></i>Interval
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -295,6 +304,31 @@
                                     </div>
                                 </div>
 
+                                <!-- Interval Options -->
+                                <div id="interval_options" class="mb-3" style="display: none;">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label for="interval_minutes" class="form-label">Interval *</label>
+                                            <select class="form-control" id="interval_minutes" name="interval_minutes">
+                                                <option value="1">Every 1 minute</option>
+                                                <option value="5">Every 5 minutes</option>
+                                                <option value="10">Every 10 minutes</option>
+                                                <option value="15" selected>Every 15 minutes</option>
+                                                <option value="20">Every 20 minutes</option>
+                                                <option value="25">Every 25 minutes</option>
+                                                <option value="30">Every 30 minutes</option>
+                                                <option value="35">Every 35 minutes</option>
+                                                <option value="40">Every 40 minutes</option>
+                                                <option value="45">Every 45 minutes</option>
+                                                <option value="50">Every 50 minutes</option>
+                                                <option value="55">Every 55 minutes</option>
+                                                <option value="60">Every 1 hour</option>
+                                            </select>
+                                            <small class="text-muted">Script will run continuously at this interval</small>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Preview Section -->
                                 <div class="mb-4">
                                     <div class="alert alert-info">
@@ -332,7 +366,7 @@ document.addEventListener('change', function(e) {
         updateFrequencyOptions();
         updatePreview();
     }
-    if (e.target.name === 'days' || e.target.name === 'time' || e.target.id === 'day' || e.target.id === 'start_date') {
+    if (e.target.name === 'days' || e.target.name === 'time' || e.target.id === 'day' || e.target.id === 'start_date' || e.target.id === 'interval_minutes') {
         updatePreview();
     }
 });
@@ -524,16 +558,32 @@ function updateFrequencyOptions() {
     const frequency = document.querySelector('input[name="frequency"]:checked').value;
     const weeklyOptions = document.getElementById('weekly_options');
     const monthlyOptions = document.getElementById('monthly_options');
+    const intervalOptions = document.getElementById('interval_options');
+    const timeField = document.getElementById('time').closest('.mb-3');
+    const startDateField = document.getElementById('start_date').closest('.mb-3');
     
     // Hide all frequency-specific options
     weeklyOptions.style.display = 'none';
     monthlyOptions.style.display = 'none';
+    intervalOptions.style.display = 'none';
     
-    // Show relevant options
+    // Show relevant options and hide/show time fields
     if (frequency === 'weekly') {
         weeklyOptions.style.display = 'block';
+        timeField.style.display = 'block';
+        startDateField.style.display = 'block';
     } else if (frequency === 'monthly') {
         monthlyOptions.style.display = 'block';
+        timeField.style.display = 'block';
+        startDateField.style.display = 'block';
+    } else if (frequency === 'interval') {
+        intervalOptions.style.display = 'block';
+        timeField.style.display = 'block'; // Show time field for intervals - user needs to specify start time
+        startDateField.style.display = 'block';
+    } else {
+        // Daily frequency
+        timeField.style.display = 'block';
+        startDateField.style.display = 'block';
     }
 }
 
@@ -592,6 +642,21 @@ function updatePreview() {
         const day = document.getElementById('day').value || '1';
         const suffix = getDaySuffix(day);
         previewText = `This schedule will run on the ${day}${suffix} of each month at ${time}${startText}`;
+    } else if (frequency === 'interval') {
+        const intervalMinutes = document.getElementById('interval_minutes').value || '15';
+        let intervalText = '';
+        if (intervalMinutes === '60') {
+            intervalText = 'every hour';
+        } else {
+            intervalText = `every ${intervalMinutes} minutes`;
+        }
+        
+        let timeText = '';
+        if (startDate || time !== '09:00') {
+            timeText = ` beginning at ${time}`;
+        }
+        
+        previewText = `This schedule will run ${intervalText}${timeText}${startText}`;
     }
     
     preview.textContent = previewText;

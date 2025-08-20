@@ -6,6 +6,7 @@ Sistema de automação de scripts Python e Batch
 
 import os
 import socket
+import time
 from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
@@ -18,7 +19,7 @@ import threading
 import json
 from functools import wraps
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.jobstores.memory import MemoryJobStore
 import atexit
 
 # Initialize Flask app
@@ -346,6 +347,45 @@ class Schedule(db.Model):
                         next_run = next_run.replace(year=next_run.year + 1, month=1)
                     else:
                         next_run = next_run.replace(month=next_run.month + 1)
+        elif self.frequency == 'interval':
+            # Handle interval frequency
+            interval_minutes = config.get('interval_minutes', 15)
+            start_time = config.get('time', '09:00')
+            
+            try:
+                interval_minutes = int(interval_minutes)
+                if interval_minutes <= 0:
+                    interval_minutes = 15
+            except (ValueError, TypeError):
+                interval_minutes = 15
+            
+            try:
+                # Parse start time
+                hour, minute = map(int, start_time.split(':'))
+                
+                # Determine the start datetime
+                if minimum_date and minimum_date > now.date():
+                    # Future start date
+                    first_run = datetime.combine(minimum_date, datetime.min.time())
+                    first_run = first_run.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                else:
+                    # Use today with specified time
+                    first_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                
+                # If first run is in the past, calculate next interval-based execution
+                if first_run <= now:
+                    # Calculate how many intervals have passed since first_run
+                    time_diff = now - first_run
+                    intervals_passed = int(time_diff.total_seconds() // (interval_minutes * 60))
+                    # Next execution is first_run + (intervals_passed + 1) * interval
+                    next_run = first_run + timedelta(minutes=(intervals_passed + 1) * interval_minutes)
+                else:
+                    # First run is in the future, use it
+                    next_run = first_run
+                    
+            except (ValueError, AttributeError):
+                # Fallback to current time + interval if parsing fails
+                next_run = now + timedelta(minutes=interval_minutes)
         else:
             # Default to daily at 9 AM for unknown frequencies
             next_run = original_now.replace(hour=9, minute=0, second=0, microsecond=0)
@@ -362,7 +402,7 @@ class Schedule(db.Model):
 # User loader
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Admin decorator
 def admin_required(f):
@@ -567,7 +607,7 @@ def create_user():
 @admin_required
 def edit_user(user_id):
     """Edit user (admin only)"""
-    user = User.query.get_or_404(user_id)
+    user = db.session.get(User, user_id) or abort(404)
     
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -640,7 +680,7 @@ def edit_user(user_id):
 @admin_required
 def delete_user(user_id):
     """Delete user (admin only)"""
-    user = User.query.get_or_404(user_id)
+    user = db.session.get(User, user_id) or abort(404)
     
     # Prevent deleting yourself
     if user.id == current_user.id:
@@ -830,7 +870,7 @@ def execute_script(script_id):
 def execute_script_background(execution_id, script_path, script_type):
     """Execute script in background thread"""
     with app.app_context():  # *** AQUI ESTAVA O PROBLEMA - FALTAVA CONTEXTO ***
-        execution = Execution.query.get(execution_id)
+        execution = db.session.get(Execution, execution_id)
         if not execution:
             return
         
@@ -1274,6 +1314,15 @@ def create_schedule():
         elif frequency == 'monthly':
             day = request.form.get('day', 1, type=int)
             time_config['day'] = max(1, min(28, day))
+        elif frequency == 'interval':
+            interval_minutes = request.form.get('interval_minutes', '15')
+            try:
+                interval_minutes = int(interval_minutes)
+                if interval_minutes <= 0:
+                    interval_minutes = 15
+            except (ValueError, TypeError):
+                interval_minutes = 15
+            time_config['interval_minutes'] = interval_minutes
         
         # Create schedule
         schedule = Schedule(
@@ -1334,6 +1383,15 @@ def edit_schedule(schedule_id):
         elif schedule.frequency == 'monthly':
             day = request.form.get('day', 1, type=int)
             time_config['day'] = max(1, min(28, day))
+        elif schedule.frequency == 'interval':
+            interval_minutes = request.form.get('interval_minutes', '15')
+            try:
+                interval_minutes = int(interval_minutes)
+                if interval_minutes <= 0:
+                    interval_minutes = 15
+            except (ValueError, TypeError):
+                interval_minutes = 15
+            time_config['interval_minutes'] = interval_minutes
         
         schedule.time_config = json.dumps(time_config)
         schedule.updated_at = datetime.now()
@@ -1432,27 +1490,55 @@ def init_scheduler():
     global scheduler
     if scheduler is None:
         try:
-            # Use Flask's instance path for database
-            db_path = os.path.join(app.instance_path, 'scriptflow.db')
-            db_uri = f'sqlite:///{db_path}'
-            
-            # Ensure instance directory exists
-            os.makedirs(app.instance_path, exist_ok=True)
-            
-            # Ensure database permissions are correct if file exists
-            if os.path.exists(db_path):
-                os.chmod(db_path, 0o664)
-            
-            jobstores = {
-                'default': SQLAlchemyJobStore(url=db_uri)
-            }
-            scheduler = BackgroundScheduler(jobstores=jobstores)
-            scheduler.start()
-            atexit.register(lambda: scheduler.shutdown())
-            print(f"✅ Scheduler initialized with database: {db_path}")
+            # Only initialize scheduler in main process (not in reloader process)
+            if os.environ.get('WERKZEUG_RUN_MAIN'):
+                # Use MemoryJobStore to avoid SQLite locking conflicts
+                jobstores = {
+                    'default': MemoryJobStore()
+                }
+                scheduler = BackgroundScheduler(jobstores=jobstores)
+                scheduler.start()
+                atexit.register(lambda: scheduler.shutdown())
+                print(f"✅ Scheduler initialized (main process)")
+                
+                # Reload all active schedules since MemoryJobStore doesn't persist
+                reload_active_schedules()
+            else:
+                print("ℹ️ Scheduler not initialized (reloader process)")
         except Exception as e:
             print(f"❌ Error initializing scheduler: {e}")
             raise
+
+def reload_active_schedules():
+    """Reload all active schedules into the scheduler (for MemoryJobStore)"""
+    global scheduler
+    
+    # Avoid double loading in debug mode - check if we already have jobs loaded
+    if scheduler is None:
+        return
+    
+    # Prevent duplicate loading by checking if jobs already exist
+    existing_jobs = scheduler.get_jobs()
+    if existing_jobs:
+        print(f"ℹ️ Scheduler already has {len(existing_jobs)} jobs, skipping reload")
+        return
+    
+    try:
+        # Get all active schedules that should be running
+        active_schedules = Schedule.query.filter_by(is_active=True).all()
+        
+        loaded_count = 0
+        for schedule in active_schedules:
+            if schedule.next_run_time:
+                try:
+                    add_schedule_to_scheduler(schedule)
+                    loaded_count += 1
+                except Exception as e:
+                    print(f"⚠️ Failed to reload schedule {schedule.name}: {e}")
+        
+        print(f"✅ Loaded {loaded_count} active schedules into scheduler")
+    except Exception as e:
+        print(f"❌ Error reloading schedules: {e}")
 
 def add_schedule_to_scheduler(schedule):
     """Add schedule to APScheduler"""
@@ -1463,6 +1549,15 @@ def add_schedule_to_scheduler(schedule):
         init_scheduler()
     
     job_id = f"schedule_{schedule.id}"
+    
+    # Check if job already exists and has same run_date to avoid duplicates
+    try:
+        existing_job = scheduler.get_job(job_id)
+        if existing_job and existing_job.next_run_time == schedule.next_run_time:
+            print(f"🔄 Job {job_id} already scheduled for {schedule.next_run_time}, skipping")
+            return
+    except:
+        pass
     
     # Remove existing job if exists
     try:
@@ -1482,6 +1577,7 @@ def add_schedule_to_scheduler(schedule):
         run_date=schedule.next_run_time,
         replace_existing=True
     )
+    print(f"➕ Added job {job_id} scheduled for {schedule.next_run_time}")
 
 def remove_schedule_from_scheduler(schedule_id):
     """Remove schedule from APScheduler"""
@@ -1496,8 +1592,15 @@ def remove_schedule_from_scheduler(schedule_id):
         scheduler.remove_job(job_id)
         print(f"🗑️ Removed job {job_id} from scheduler")
     except Exception as e:
-        # Job might already be gone or never existed - this is OK
-        print(f"ℹ️ Job {job_id} was already removed or not found in scheduler")
+        # Import here to avoid circular imports
+        from apscheduler.jobstores.base import JobLookupError
+        
+        if isinstance(e, JobLookupError):
+            # Job might already be gone or never existed - this is OK
+            print(f"ℹ️ Job {job_id} was already removed or not found in scheduler")
+        else:
+            # Other errors should be reported
+            print(f"⚠️ Unexpected error removing job {job_id}: {e}")
         pass
 
 def execute_scheduled_script(schedule_id):
@@ -1505,7 +1608,7 @@ def execute_scheduled_script(schedule_id):
     with app.app_context():
         try:
             # Get fresh schedule object from database
-            schedule = Schedule.query.get(schedule_id)
+            schedule = db.session.get(Schedule, schedule_id)
             if not schedule or not schedule.is_active:
                 print(f"❌ Schedule {schedule_id} not found or inactive")
                 return
@@ -1531,20 +1634,43 @@ def execute_scheduled_script(schedule_id):
             # Update schedule's last execution
             schedule.last_execution_id = execution.id
             
-            # Remove current job from scheduler (since it just executed)
-            remove_schedule_from_scheduler(schedule.id)
+            # Store schedule_id before any database operations to avoid autoflush
+            schedule_id_safe = schedule.id
+            schedule_name_safe = schedule.name
             
-            # Calculate and schedule next run
-            old_next_run = schedule.next_run_time
-            print(f"📅 Schedule {schedule.name}: Calculating next run from {old_next_run}")
-            
-            schedule.calculate_next_run()
-            new_next_run = schedule.next_run_time
-            
-            print(f"📅 Schedule {schedule.name}: Updated next run to {new_next_run}")
-            
-            # Commit schedule changes
-            db.session.commit()
+            try:
+                # Remove current job from scheduler (since it just executed)
+                remove_schedule_from_scheduler(schedule_id_safe)
+                
+                # Calculate and schedule next run with autoflush disabled
+                with db.session.no_autoflush:
+                    old_next_run = schedule.next_run_time
+                    print(f"📅 Schedule {schedule_name_safe}: Calculating next run from {old_next_run}")
+                    
+                    schedule.calculate_next_run()
+                    new_next_run = schedule.next_run_time
+                    
+                    print(f"📅 Schedule {schedule_name_safe}: Updated next run to {new_next_run}")
+                
+                # Commit schedule changes with retry logic
+                max_retries = 3
+                for retry in range(max_retries):
+                    try:
+                        db.session.commit()
+                        break
+                    except Exception as e:
+                        if retry < max_retries - 1:
+                            print(f"⚠️ Database commit failed (retry {retry + 1}/{max_retries}): {e}")
+                            time.sleep(0.1 * (retry + 1))  # Exponential backoff
+                            db.session.rollback()
+                        else:
+                            print(f"❌ Database commit failed after {max_retries} retries: {e}")
+                            db.session.rollback()
+                            raise
+            except Exception as e:
+                print(f"❌ Error in schedule update process: {e}")
+                db.session.rollback()
+                raise
             print(f"💾 Schedule updated with last_execution_id: {execution.id}")
             
             # Add next job to scheduler if there's a next run time
@@ -1658,12 +1784,9 @@ if __name__ == '__main__':
             db.session.commit()
             print("✅ Created default admin user: admin/admin123")
         
-        # Load existing schedules into APScheduler on startup
-        schedules = Schedule.query.filter_by(is_active=True).all()
-        for schedule in schedules:
-            if schedule.next_run_time:
-                add_schedule_to_scheduler(schedule)
-        print(f"✅ Loaded {len(schedules)} active schedules into scheduler")
+        # Schedules are loaded in init_scheduler() via reload_active_schedules()
+        # to avoid duplicate loading in debug mode
+        pass
     
     # Find free port and start
     port = find_free_port()

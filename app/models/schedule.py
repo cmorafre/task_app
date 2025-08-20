@@ -16,6 +16,7 @@ class ScheduleFrequency(Enum):
     WEEKLY = 'weekly'
     MONTHLY = 'monthly'
     HOURLY = 'hourly'
+    INTERVAL = 'interval'
 
 class Schedule(db.Model):
     """Schedule model for managing automated script execution"""
@@ -126,6 +127,12 @@ class Schedule(db.Model):
         
         if self.frequency == ScheduleFrequency.HOURLY:
             return "Every hour"
+        elif self.frequency == ScheduleFrequency.INTERVAL:
+            interval_minutes = config.get('interval_minutes', 15)
+            if interval_minutes == 60:
+                return "Every hour"
+            else:
+                return f"Every {interval_minutes} minutes"
         elif self.frequency == ScheduleFrequency.DAILY:
             time = config.get('time', '00:00')
             return f"Daily at {time}"
@@ -153,14 +160,65 @@ class Schedule(db.Model):
             # Next hour
             return now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         
+        elif self.frequency == ScheduleFrequency.INTERVAL:
+            # Next execution based on interval minutes and start time
+            interval_minutes = config.get('interval_minutes', 15)
+            start_time = config.get('time', '09:00')
+            start_date = config.get('start_date')
+            
+            try:
+                interval_minutes = int(interval_minutes)
+                if interval_minutes <= 0:
+                    interval_minutes = 15
+            except (ValueError, TypeError):
+                interval_minutes = 15
+            
+            try:
+                # Parse start time
+                hour, minute = map(int, start_time.split(':'))
+                
+                # Determine the start datetime
+                if start_date:
+                    # Parse start date (format: YYYY-MM-DD)
+                    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                    first_run = start_date_obj.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                else:
+                    # Use today with specified time
+                    first_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                
+                # If first run is in the past, calculate next interval-based execution
+                if first_run <= now:
+                    # Calculate how many intervals have passed since first_run
+                    time_diff = now - first_run
+                    intervals_passed = int(time_diff.total_seconds() // (interval_minutes * 60))
+                    # Next execution is first_run + (intervals_passed + 1) * interval
+                    return first_run + timedelta(minutes=(intervals_passed + 1) * interval_minutes)
+                else:
+                    # First run is in the future, use it
+                    return first_run
+                    
+            except (ValueError, AttributeError):
+                # Fallback to current time + interval if parsing fails
+                return now + timedelta(minutes=interval_minutes)
+        
         elif self.frequency == ScheduleFrequency.DAILY:
-            # Parse time from config (format: "HH:MM")
+            # Parse time and start_date from config (format: "HH:MM")
             time_str = config.get('time', '00:00')
+            start_date = config.get('start_date')
+            
             try:
                 hour, minute = map(int, time_str.split(':'))
-                next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
                 
-                # If time has passed today, schedule for tomorrow
+                # Determine the start datetime
+                if start_date:
+                    # Parse start date (format: YYYY-MM-DD)
+                    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                    next_run = start_date_obj.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                else:
+                    # Use today with specified time
+                    next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                
+                # If time has passed, schedule for next day
                 if next_run <= now:
                     next_run += timedelta(days=1)
                 

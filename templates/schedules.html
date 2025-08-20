@@ -87,6 +87,34 @@
     font-size: 0.85rem;
     font-weight: 600;
     padding: 0.5em 0.8em;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+/* Ensure consistent layout for schedule columns */
+.schedule-column {
+    vertical-align: top;
+    min-width: 120px;
+}
+
+.schedule-column .schedule-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.schedule-column .badge {
+    display: inline-block;
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+.schedule-column .schedule-datetime {
+    display: block;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    line-height: 1.2;
 }
 
 .badge.bg-warning {
@@ -188,8 +216,8 @@
                                     <th>Schedule Name</th>
                                     <th>Script</th>
                                     <th>Frequency</th>
-                                    <th>Next Run</th>
                                     <th>Last Execution</th>
+                                    <th>Next Run</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -220,16 +248,9 @@
                                         {{ schedule.script.name }}
                                     </td>
                                     <td>{{ schedule.frequency_display }}</td>
-                                    <td>
-                                        {% if schedule.is_active and schedule.next_run_time %}
-                                        <span class="text-primary">{{ schedule.next_run_display }}</span>
-                                        {% else %}
-                                        <span class="text-muted">Not scheduled</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
+                                    <td class="schedule-column">
                                         {% if schedule.last_execution %}
-                                        <div>
+                                        <div class="schedule-item">
                                             <span class="badge {% if schedule.last_execution.status == 'running' %}status-running{% else %}bg-{{ schedule.last_execution.status_color }}{% endif %}">
                                                 {% if schedule.last_execution.status == 'running' %}
                                                     <i class="bi bi-arrow-clockwise rotating-icon"></i>
@@ -238,17 +259,28 @@
                                                 {% endif %}
                                                 {{ schedule.last_execution.status|title }}
                                             </span>
-                                            <br>
-                                            <small class="text-muted">
-                                                {% if schedule.last_execution.completed_at %}
-                                                    <i class="bi bi-clock me-1"></i>{{ schedule.last_execution.completed_at.strftime('%d/%m/%Y %H:%M') }}
-                                                {% elif schedule.last_execution.started_at %}
-                                                    <i class="bi bi-clock me-1"></i>{{ schedule.last_execution.started_at.strftime('%d/%m/%Y %H:%M') }}
-                                                {% endif %}
-                                            </small>
+                                            {% if schedule.last_execution.completed_at or schedule.last_execution.started_at %}
+                                            <span class="text-muted schedule-datetime">
+                                                <i class="bi bi-clock me-1"></i>{% if schedule.last_execution.completed_at %}{{ schedule.last_execution.completed_at.strftime('%d/%m/%Y %H:%M') }}{% else %}{{ schedule.last_execution.started_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+                                            </span>
+                                            {% endif %}
                                         </div>
                                         {% else %}
                                         <span class="text-muted">Never executed</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="schedule-column">
+                                        {% if schedule.is_active and schedule.next_run_time %}
+                                        <div class="schedule-item">
+                                            <span class="badge" style="background-color: #ff8c00; color: white;">
+                                                <i class="bi bi-circle-fill me-1" style="color: #ffa500;"></i> Queue
+                                            </span>
+                                            <span class="text-muted schedule-datetime">
+                                                <i class="bi bi-clock me-1"></i>{{ schedule.next_run_time.strftime('%d/%m/%Y %H:%M') }}
+                                            </span>
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">Not scheduled</span>
                                         {% endif %}
                                     </td>
                                     <td>
