@@ -49,6 +49,24 @@ login_manager.login_message = 'Please log in to access ScriptFlow.'
 # Initialize scheduler (will be configured later after database is ready)
 scheduler = None
 
+# Template context processors
+@app.context_processor
+def inject_ui_version():
+    """Inject UI version info into all templates"""
+    try:
+        return {
+            'ui_info': UIVersionManager.get_ui_display_info(),
+            'ui_version': UIVersionManager.get_ui_version(),
+            'is_modern_ui': UIVersionManager.is_modern_ui()
+        }
+    except:
+        # Fallback if there are any issues
+        return {
+            'ui_info': {},
+            'ui_version': 'v1',
+            'is_modern_ui': False
+        }
+
 # Models
 class User(UserMixin, db.Model):
     __tablename__ = 'users'

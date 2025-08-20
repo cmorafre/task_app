@@ -212,20 +212,6 @@
     </div>
 </div>
 
-<!-- UI Version Toggle (Development) -->
-{% if current_user.is_admin %}
-<div class="position-fixed bottom-0 end-0 m-3">
-    <div class="dropdown">
-        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-            <i class="bi bi-palette me-1"></i>UI: v2
-        </button>
-        <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="?ui=v1">Switch to v1 (Bootstrap)</a></li>
-            <li><a class="dropdown-item active" href="?ui=v2">v2 (Modern) ✓</a></li>
-        </ul>
-    </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block extra_css %}

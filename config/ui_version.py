@@ -68,3 +68,19 @@ class UIVersionManager:
         if session:
             session['ui_version'] = new_version
         return new_version
+    
+    @classmethod
+    def get_ui_display_info(cls):
+        """Retorna informações para exibição no template"""
+        current_version = cls.get_ui_version()
+        is_v2 = current_version == cls.MODERN_VERSION
+        
+        return {
+            'current_version': current_version,
+            'current_label': 'v2 (Modern)' if is_v2 else 'v1 (Bootstrap)',
+            'current_icon': 'bi-stars' if is_v2 else 'bi-bootstrap',
+            'is_modern': is_v2,
+            'switch_to_version': cls.DEFAULT_VERSION if is_v2 else cls.MODERN_VERSION,
+            'switch_to_label': 'Switch to v1 (Bootstrap)' if is_v2 else 'Switch to v2 (Modern)',
+            'switch_to_icon': 'bi-bootstrap' if is_v2 else 'bi-stars'
+        }
