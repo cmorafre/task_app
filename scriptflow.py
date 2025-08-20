@@ -1749,6 +1749,42 @@ def terminal_execute():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/preview/modern-ui')
+@login_required  
+def modern_ui_preview():
+    """Preview of modern UI design - Dashboard"""
+    return render_template('modern_preview_dashboard.html')
+
+@app.route('/preview/scripts')
+@login_required  
+def modern_scripts_preview():
+    """Preview of modern UI design - Scripts"""
+    return render_template('modern_preview_scripts.html')
+
+@app.route('/preview/schedules')
+@login_required  
+def modern_schedules_preview():
+    """Preview of modern UI design - Schedules"""
+    return render_template('modern_preview_schedules.html')
+
+@app.route('/preview/logs')
+@login_required  
+def modern_logs_preview():
+    """Preview of modern UI design - Logs"""
+    return render_template('modern_preview_logs.html')
+
+@app.route('/preview/users')
+@login_required  
+def modern_users_preview():
+    """Preview of modern UI design - User Management"""
+    return render_template('modern_preview_users.html')
+
+@app.route('/preview/settings')
+@login_required  
+def modern_settings_preview():
+    """Preview of modern UI design - Settings"""
+    return render_template('modern_preview_settings.html')
+
 # Templates removed - now using separate .html files
 
 def find_free_port(start_port=8000):

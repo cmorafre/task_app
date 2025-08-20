@@ -1,0 +1,489 @@
+{% extends "base_modern_preview.html" %}
+
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Configure system preferences and integrations{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Settings Navigation -->
+    <div class="col-lg-3">
+        <div class="modern-card">
+            <h5 class="mb-3">Settings Categories</h5>
+            <div class="list-group list-group-flush">
+                <a href="#" class="list-group-item list-group-item-action active d-flex align-items-center">
+                    <i class="bi bi-gear me-2"></i>
+                    General
+                </a>
+                <a href="#" class="list-group-item list-group-item-action d-flex align-items-center">
+                    <i class="bi bi-code-slash me-2"></i>
+                    Python Environment
+                </a>
+                <a href="#" class="list-group-item list-group-item-action d-flex align-items-center">
+                    <i class="bi bi-shield-check me-2"></i>
+                    Security
+                </a>
+                <a href="#" class="list-group-item list-group-item-action d-flex align-items-center">
+                    <i class="bi bi-bell me-2"></i>
+                    Notifications
+                </a>
+                <a href="#" class="list-group-item list-group-item-action d-flex align-items-center">
+                    <i class="bi bi-database me-2"></i>
+                    Database
+                </a>
+                <a href="#" class="list-group-item list-group-item-action d-flex align-items-center">
+                    <i class="bi bi-cloud me-2"></i>
+                    Integrations
+                </a>
+                <a href="#" class="list-group-item list-group-item-action d-flex align-items-center">
+                    <i class="bi bi-info-circle me-2"></i>
+                    System Info
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Content -->
+    <div class="col-lg-9">
+        <!-- General Settings -->
+        <div class="modern-card mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h5 class="mb-1">General Settings</h5>
+                    <p class="text-muted mb-0 small">Basic system configuration and preferences</p>
+                </div>
+                <button class="btn btn-primary">Save Changes</button>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <label class="form-label">Application Name</label>
+                    <input type="text" class="form-control" value="ScriptFlow" placeholder="Enter application name">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Time Zone</label>
+                    <select class="form-select">
+                        <option>America/Sao_Paulo (UTC-3)</option>
+                        <option>America/New_York (UTC-5)</option>
+                        <option>Europe/London (UTC+0)</option>
+                        <option>Asia/Tokyo (UTC+9)</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Max Concurrent Scripts</label>
+                    <input type="number" class="form-control" value="10" min="1" max="50">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Default Script Timeout (seconds)</label>
+                    <input type="number" class="form-control" value="300" min="30" max="3600">
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="enableLogging" checked>
+                        <label class="form-check-label" for="enableLogging">
+                            Enable detailed logging
+                        </label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="autoCleanup" checked>
+                        <label class="form-check-label" for="autoCleanup">
+                            Auto-cleanup old execution logs (30+ days)
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Python Environment -->
+        <div class="modern-card mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h5 class="mb-1">Python Environment</h5>
+                    <p class="text-muted mb-0 small">Configure Python interpreter and dependencies</p>
+                </div>
+                <button class="btn btn-outline-primary">Test Configuration</button>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12">
+                    <label class="form-label">Python Executable Path</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" value="/opt/anaconda3/bin/python3" placeholder="Path to Python executable">
+                        <button class="btn btn-outline-secondary" type="button">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Current: Python 3.12.4 | Anaconda</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Virtual Environment Path (Optional)</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" placeholder="Path to virtual environment">
+                        <button class="btn btn-outline-secondary" type="button">
+                            <i class="bi bi-folder"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Leave empty to use system Python</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Available Python Interpreters</label>
+                    <div class="list-group">
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-medium">/opt/anaconda3/bin/python3</div>
+                                <small class="text-muted">Python 3.12.4 | Anaconda, Inc.</small>
+                            </div>
+                            <span class="badge bg-success">Current</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-medium">/usr/bin/python3</div>
+                                <small class="text-muted">Python 3.11.2</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary">Select</button>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-medium">/usr/local/bin/python3</div>
+                                <small class="text-muted">Python 3.10.8</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary">Select</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal & Package Management -->
+        <div class="modern-card mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h5 class="mb-1">Package Management</h5>
+                    <p class="text-muted mb-0 small">Install and manage Python packages</p>
+                </div>
+                <button class="btn btn-success">
+                    <i class="bi bi-terminal me-2"></i>Open Terminal
+                </button>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">Installed Packages</h6>
+                        <div class="input-group" style="width: 300px;">
+                            <input type="text" class="form-control form-control-sm" placeholder="Package name">
+                            <button class="btn btn-primary btn-sm">
+                                <i class="bi bi-plus"></i> Install
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Package</th>
+                                    <th>Version</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-box me-2 text-success"></i>
+                                            <strong>speedtest-cli</strong>
+                                        </div>
+                                    </td>
+                                    <td>2.1.3</td>
+                                    <td><span class="badge bg-success">Installed</span></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-warning">Update</button>
+                                            <button class="btn btn-outline-danger">Remove</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-box me-2 text-info"></i>
+                                            <strong>requests</strong>
+                                        </div>
+                                    </td>
+                                    <td>2.31.0</td>
+                                    <td><span class="badge bg-success">Installed</span></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" disabled>Latest</button>
+                                            <button class="btn btn-outline-danger">Remove</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-box me-2 text-primary"></i>
+                                            <strong>pandas</strong>
+                                        </div>
+                                    </td>
+                                    <td>2.0.3</td>
+                                    <td><span class="badge bg-warning">Update Available</span></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-warning">Update to 2.1.1</button>
+                                            <button class="btn btn-outline-danger">Remove</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Settings -->
+        <div class="modern-card mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h5 class="mb-1">Security Settings</h5>
+                    <p class="text-muted mb-0 small">Authentication and access control</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-warning">
+                        <i class="bi bi-shield-check me-2"></i>Security Audit
+                    </button>
+                    <button class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <label class="form-label">Session Timeout (minutes)</label>
+                    <input type="number" class="form-control" value="60" min="5" max="480">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Max Login Attempts</label>
+                    <input type="number" class="form-control" value="5" min="3" max="10">
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="requireHttps" checked>
+                        <label class="form-check-label" for="requireHttps">
+                            Force HTTPS connections
+                        </label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="enableTwoFactor">
+                        <label class="form-check-label" for="enableTwoFactor">
+                            Enable Two-Factor Authentication
+                        </label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="logSecurityEvents" checked>
+                        <label class="form-check-label" for="logSecurityEvents">
+                            Log security events
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Information -->
+        <div class="modern-card">
+            <h5 class="mb-4">System Information</h5>
+            
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">Application</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Version:</span>
+                                <span class="fw-medium">1.0.0</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Build:</span>
+                                <span class="fw-medium">2024.08.20</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Uptime:</span>
+                                <span class="fw-medium">2h 15m</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">System</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>OS:</span>
+                                <span class="fw-medium">macOS 14.6</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Python:</span>
+                                <span class="fw-medium">3.12.4</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Flask:</span>
+                                <span class="fw-medium">2.3.2</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">Database</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Type:</span>
+                                <span class="fw-medium">SQLite</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Size:</span>
+                                <span class="fw-medium">2.4 MB</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Status:</span>
+                                <span class="badge bg-success">Connected</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">Performance</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>CPU Usage:</span>
+                                <span class="fw-medium">12%</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Memory:</span>
+                                <span class="fw-medium">145 MB</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Disk Space:</span>
+                                <span class="fw-medium">1.2 GB free</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4 pt-3 border-top">
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary">
+                        <i class="bi bi-download me-2"></i>Export Settings
+                    </button>
+                    <button class="btn btn-outline-secondary">
+                        <i class="bi bi-upload me-2"></i>Import Settings
+                    </button>
+                    <button class="btn btn-outline-warning">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Reset to Defaults
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Terminal Modal -->
+<div class="modal fade" id="terminalModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-terminal me-2"></i>Web Terminal
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="bg-dark text-light p-3" style="min-height: 400px; font-family: 'Courier New', monospace;">
+                    <div class="mb-2">ScriptFlow Web Terminal v1.0</div>
+                    <div class="mb-2">Type 'help' for available commands.</div>
+                    <div class="mb-3">────────────────────────────────────</div>
+                    <div class="mb-2">
+                        <span class="text-success">user@scriptflow:~$</span>
+                        <span class="text-warning">pip list</span>
+                    </div>
+                    <div class="text-muted mb-2">
+                        Package           Version<br>
+                        ----------------- --------<br>
+                        Flask             2.3.2<br>
+                        requests          2.31.0<br>
+                        speedtest-cli     2.1.3<br>
+                        pandas            2.0.3<br>
+                    </div>
+                    <div class="d-flex">
+                        <span class="text-success">user@scriptflow:~$</span>
+                        <input type="text" class="bg-transparent border-0 text-light ms-2 flex-grow-1" 
+                               style="outline: none;" placeholder="Enter command...">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Settings-specific styles */
+.list-group-item-action.active {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.form-switch .form-check-input {
+    background-size: contain;
+}
+
+.form-switch .form-check-input:checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.card.bg-light {
+    background-color: var(--muted) !important;
+}
+
+.table-sm th, .table-sm td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+.btn-group-sm .btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+</style>
+
+<script>
+// Terminal modal demo
+document.querySelectorAll('[data-bs-toggle="modal"]').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const modal = new bootstrap.Modal(document.getElementById('terminalModal'));
+        modal.show();
+    });
+});
+
+// Settings tabs
+document.querySelectorAll('.list-group-item').forEach(item => {
+    item.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('.list-group-item').forEach(i => i.classList.remove('active'));
+        this.classList.add('active');
+    });
+});
+</script>
+{% endblock %}
