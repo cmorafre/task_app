@@ -789,7 +789,7 @@ def upload_script():
     
     return render_template('upload.html')
 
-@app.route('/scripts/<int:script_id>/execute', methods=['POST'])
+@app.route('/scripts/<int:script_id>/execute', methods=['GET', 'POST'])
 @login_required
 def execute_script(script_id):
     script = Script.query.filter_by(id=script_id, user_id=current_user.id, is_active=True).first_or_404()
@@ -798,6 +798,17 @@ def execute_script(script_id):
         flash('Script file not found.', 'error')
         return redirect(url_for('scripts'))
     
+    if request.method == 'GET':
+        # Show execution page with recent executions
+        recent_executions = Execution.query.filter_by(script_id=script.id)\
+            .order_by(Execution.started_at.desc())\
+            .limit(10).all()
+        
+        return render_template('execute_script.html', 
+                             script=script,
+                             recent_executions=recent_executions)
+    
+    # POST method - actually execute the script
     # Create execution record
     execution = Execution(
         script_id=script.id,

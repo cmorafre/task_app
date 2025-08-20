@@ -1,0 +1,27 @@
+[Unit]
+Description=ScriptFlow - Script Automation Platform
+After=network.target
+
+[Service]
+Type=simple
+User=scriptflow
+Group=scriptflow
+WorkingDirectory=/opt/scriptflow
+Environment=PATH=/opt/scriptflow/venv/bin
+EnvironmentFile=/opt/scriptflow/.env
+ExecStart=/opt/scriptflow/venv/bin/gunicorn --bind 127.0.0.1:5000 --workers 2 --timeout 300 --access-logfile /opt/scriptflow/logs/access.log --error-logfile /opt/scriptflow/logs/error.log scriptflow:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/scriptflow
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
