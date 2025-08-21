@@ -41,39 +41,39 @@
 
             <!-- Script Info Cards -->
             <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card border-primary">
-                        <div class="card-body text-center">
-                            <i class="bi bi-file-earmark-code text-primary mb-2" style="font-size: 2rem;"></i>
-                            <h6 class="card-title">Script Type</h6>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-primary h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-file-earmark-code text-primary mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">Script Type</h6>
                             <span class="badge bg-secondary">{{ script.script_type.upper() }}</span>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card border-success">
-                        <div class="card-body text-center">
-                            <i class="bi bi-archive text-success mb-2" style="font-size: 2rem;"></i>
-                            <h6 class="card-title">File Size</h6>
-                            <p class="card-text h5 mb-0">{{ (script.file_size / 1024)|round(1) }} KB</p>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-success h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-archive text-success mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">File Size</h6>
+                            <p class="card-text h6 mb-0 fw-bold">{{ (script.file_size / 1024)|round(1) }} KB</p>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card border-info">
-                        <div class="card-body text-center">
-                            <i class="bi bi-calendar text-info mb-2" style="font-size: 2rem;"></i>
-                            <h6 class="card-title">Created</h6>
-                            <p class="card-text mb-0">{{ script.created_at.strftime('%Y-%m-%d') }}</p>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-info h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-calendar text-info mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">Created</h6>
+                            <p class="card-text mb-1 fw-bold">{{ script.created_at.strftime('%d/%m/%Y') }}</p>
                             <small class="text-muted">{{ script.created_at.strftime('%H:%M') }}</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card border-warning">
-                        <div class="card-body text-center">
-                            <i class="bi bi-heart text-warning mb-2" style="font-size: 2rem;"></i>
-                            <h6 class="card-title">Status</h6>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-warning h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-check-circle text-success mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">Status</h6>
                             <span class="badge bg-success">Active</span>
                         </div>
                     </div>

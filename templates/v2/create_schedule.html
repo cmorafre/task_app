@@ -2,342 +2,322 @@
 
 {% block title %}Create Schedule - ScriptFlow{% endblock %}
 
+{% block page_title %}Create Schedule{% endblock %}
+{% block page_subtitle %}Set up automated script execution{% endblock %}
+
 {% block content %}
-<div class="space-y-6">
-    <!-- Page Header with Breadcrumb -->
-    <div class="flex flex-col space-y-4">
-        <!-- Breadcrumb -->
-        <nav class="flex" aria-label="Breadcrumb">
-            <ol class="inline-flex items-center space-x-1 md:space-x-3">
-                <li class="inline-flex items-center">
-                    <a href="{{ url_for('schedules') }}" class="text-gray-700 hover:text-primary-600 inline-flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
-                        </svg>
-                        Schedules
-                    </a>
-                </li>
-                <li>
-                    <div class="flex items-center">
-                        <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                        </svg>
-                        <span class="text-gray-500 ml-1 md:ml-2">Create Schedule</span>
-                    </div>
-                </li>
-            </ol>
-        </nav>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('schedules') }}" class="text-decoration-none">
+                            <i class="bi bi-calendar me-2"></i>Schedules
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">Create Schedule</li>
+                </ol>
+            </nav>
 
-        <!-- Page Title -->
-        <div class="flex items-center justify-between">
-            <div class="flex items-center">
-                <div class="p-2 bg-primary-100 rounded-lg mr-3">
-                    <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Create New Schedule</h1>
-                    <p class="text-gray-600 mt-1">Set up automated script execution</p>
-                </div>
-            </div>
-            <a href="{{ url_for('schedules') }}" class="btn btn-outline">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                </svg>
-                Back to Schedules
-            </a>
-        </div>
-    </div>
-
-    <!-- Create Form -->
-    <div class="max-w-4xl">
-        <form method="POST" class="space-y-6">
-            <!-- Basic Settings -->
-            <div class="card">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path>
-                        </svg>
-                        Basic Settings
-                    </h3>
-                </div>
-                <div class="p-6 space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Script Selection -->
-                        <div>
-                            <label for="script_search" class="block text-sm font-medium text-gray-700 mb-2">
-                                Script <span class="text-red-500">*</span>
-                            </label>
-                            <div class="relative">
-                                <input 
-                                    type="text" 
-                                    id="script_search" 
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    placeholder="Type to search scripts..." 
-                                    autocomplete="off">
-                                <input type="hidden" id="script_id" name="script_id" required>
-                                <div id="script_dropdown" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden">
-                                    {% for script in scripts %}
-                                    <div class="script-option cursor-pointer px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0" 
-                                         data-value="{{ script.id }}"
-                                         data-name="{{ script.name.lower() }}"
-                                         data-type="{{ script.script_type.lower() }}">
-                                        <div class="flex items-center space-x-3">
-                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                {{ script.script_type.upper() }}
-                                            </span>
-                                            <div>
-                                                <div class="font-medium text-gray-900">{{ script.name }}</div>
-                                                {% if script.description %}
-                                                <div class="text-sm text-gray-500">{{ script.description[:60] }}{% if script.description|length > 60 %}...{% endif %}</div>
-                                                {% endif %}
+            <!-- Create Form -->
+            <div class="row justify-content-center">
+                <div class="col-xl-10">
+                    <form method="POST">
+                        <!-- Basic Settings -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-gear me-2"></i>
+                                    Basic Settings
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <!-- Script Selection -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="script_search" class="form-label">
+                                            Script <span class="text-danger">*</span>
+                                        </label>
+                                        <div class="position-relative">
+                                            <input 
+                                                type="text" 
+                                                id="script_search" 
+                                                class="form-control"
+                                                placeholder="Type to search scripts..." 
+                                                autocomplete="off">
+                                            <input type="hidden" id="script_id" name="script_id" required>
+                                            <div id="script_dropdown" class="position-absolute w-100 mt-1 bg-white border rounded shadow-sm" style="z-index: 1000; max-height: 15rem; overflow-y: auto; display: none;">
+                                                {% for script in scripts %}
+                                                <div class="script-option d-flex align-items-center p-3 border-bottom cursor-pointer" 
+                                                     data-value="{{ script.id }}"
+                                                     data-name="{{ script.name.lower() }}"
+                                                     data-type="{{ script.script_type.lower() }}"
+                                                     style="cursor: pointer;">
+                                                    <span class="badge bg-primary me-3">
+                                                        {{ script.script_type.upper() }}
+                                                    </span>
+                                                    <div>
+                                                        <div class="fw-medium">{{ script.name }}</div>
+                                                        {% if script.description %}
+                                                        <div class="text-muted small">{{ script.description[:60] }}{% if script.description|length > 60 %}...{% endif %}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
                                             </div>
                                         </div>
                                     </div>
-                                    {% endfor %}
+
+                                    <!-- Schedule Name -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="name" class="form-label">
+                                            Schedule Name <span class="text-danger">*</span>
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="name" 
+                                            name="name" 
+                                            class="form-control"
+                                            placeholder="e.g., Daily Backup" 
+                                            required>
+                                    </div>
+                                </div>
+
+                                <!-- Description -->
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea 
+                                        id="description" 
+                                        name="description" 
+                                        rows="3" 
+                                        class="form-control"
+                                        placeholder="Optional description of what this schedule does..."></textarea>
+                                </div>
+
+                                <!-- Active Toggle -->
+                                <div class="form-check">
+                                    <input type="checkbox" id="is_active" name="is_active" checked class="form-check-input">
+                                    <label for="is_active" class="form-check-label">
+                                        Active Schedule
+                                        <small class="d-block text-muted">Enable this schedule to run automatically</small>
+                                    </label>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Schedule Name -->
-                        <div>
-                            <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
-                                Schedule Name <span class="text-red-500">*</span>
-                            </label>
-                            <input 
-                                type="text" 
-                                id="name" 
-                                name="name" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                placeholder="e.g., Daily Backup" 
-                                required>
-                        </div>
-                    </div>
-
-                    <!-- Description -->
-                    <div>
-                        <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                        <textarea 
-                            id="description" 
-                            name="description" 
-                            rows="3" 
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            placeholder="Optional description of what this schedule does..."></textarea>
-                    </div>
-
-                    <!-- Active Toggle -->
-                    <div class="flex items-center space-x-3">
-                        <input type="checkbox" id="is_active" name="is_active" checked class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
-                        <label for="is_active" class="text-sm font-medium text-gray-700">
-                            Active Schedule
-                            <span class="block text-xs text-gray-500">Enable this schedule to run automatically</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Schedule Pattern -->
-            <div class="card">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                        Schedule Pattern
-                    </h3>
-                </div>
-                <div class="p-6 space-y-6">
-                    <!-- Frequency Selection -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-3">
-                            Frequency <span class="text-red-500">*</span>
-                        </label>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="radio" name="frequency" value="daily" checked class="sr-only">
-                                <div class="flex items-center">
-                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                    </svg>
-                                    <span class="text-sm font-medium">Daily</span>
+                        <!-- Schedule Pattern -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-calendar-event me-2"></i>
+                                    Schedule Pattern
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- Frequency Selection -->
+                                <div class="mb-4">
+                                    <label class="form-label">
+                                        Frequency <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="row">
+                                        <div class="col-md-3 col-6 mb-2">
+                                            <div class="form-check">
+                                                <input type="radio" name="frequency" value="daily" checked class="form-check-input" id="freq_daily">
+                                                <label class="form-check-label w-100 p-2 border rounded d-flex align-items-center" for="freq_daily" style="cursor: pointer;">
+                                                    <i class="bi bi-calendar-day me-2 text-primary"></i>
+                                                    <span>Daily</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 col-6 mb-2">
+                                            <div class="form-check">
+                                                <input type="radio" name="frequency" value="weekly" class="form-check-input" id="freq_weekly">
+                                                <label class="form-check-label w-100 p-2 border rounded d-flex align-items-center" for="freq_weekly" style="cursor: pointer;">
+                                                    <i class="bi bi-calendar-week me-2 text-primary"></i>
+                                                    <span>Weekly</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 col-6 mb-2">
+                                            <div class="form-check">
+                                                <input type="radio" name="frequency" value="monthly" class="form-check-input" id="freq_monthly">
+                                                <label class="form-check-label w-100 p-2 border rounded d-flex align-items-center" for="freq_monthly" style="cursor: pointer;">
+                                                    <i class="bi bi-calendar-month me-2 text-primary"></i>
+                                                    <span>Monthly</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3 col-6 mb-2">
+                                            <div class="form-check">
+                                                <input type="radio" name="frequency" value="interval" class="form-check-input" id="freq_interval">
+                                                <label class="form-check-label w-100 p-2 border rounded d-flex align-items-center" for="freq_interval" style="cursor: pointer;">
+                                                    <i class="bi bi-clock me-2 text-primary"></i>
+                                                    <span>Interval</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </label>
-                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="radio" name="frequency" value="weekly" class="sr-only">
-                                <div class="flex items-center">
-                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                    </svg>
-                                    <span class="text-sm font-medium">Weekly</span>
-                                </div>
-                            </label>
-                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="radio" name="frequency" value="monthly" class="sr-only">
-                                <div class="flex items-center">
-                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                    </svg>
-                                    <span class="text-sm font-medium">Monthly</span>
-                                </div>
-                            </label>
-                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="radio" name="frequency" value="interval" class="sr-only">
-                                <div class="flex items-center">
-                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    <span class="text-sm font-medium">Interval</span>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
 
-                    <!-- Time and Date Settings -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                            <label for="time" class="block text-sm font-medium text-gray-700 mb-2">
-                                Time <span class="text-red-500">*</span>
-                            </label>
-                            <input 
-                                type="time" 
-                                id="time" 
-                                name="time" 
-                                value="09:00" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                required>
-                        </div>
-                        
-                        <div>
-                            <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-                            <input 
-                                type="date" 
-                                id="start_date" 
-                                name="start_date" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                            <p class="text-xs text-gray-500 mt-1">Leave empty to start today</p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Quick Start</label>
-                            <div class="space-x-2">
-                                <button type="button" onclick="setStartDate('today')" class="btn btn-outline btn-sm">Today</button>
-                                <button type="button" onclick="setStartDate('tomorrow')" class="btn btn-outline btn-sm">Tomorrow</button>
-                                <button type="button" onclick="setStartDate('next_week')" class="btn btn-outline btn-sm">Next Week</button>
+                                <!-- Time and Date Settings -->
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="time" class="form-label">
+                                            Time <span class="text-danger">*</span>
+                                        </label>
+                                        <input 
+                                            type="time" 
+                                            id="time" 
+                                            name="time" 
+                                            value="09:00" 
+                                            class="form-control"
+                                            required>
+                                    </div>
+                                    
+                                    <div class="col-md-4 mb-3">
+                                        <label for="start_date" class="form-label">Start Date</label>
+                                        <input 
+                                            type="date" 
+                                            id="start_date" 
+                                            name="start_date" 
+                                            class="form-control">
+                                        <small class="text-muted">Leave empty to start today</small>
+                                    </div>
+                                    
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label">Quick Start</label>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <button type="button" onclick="setStartDate('today')" class="btn btn-outline-secondary btn-sm">Today</button>
+                                            <button type="button" onclick="setStartDate('tomorrow')" class="btn btn-outline-secondary btn-sm">Tomorrow</button>
+                                            <button type="button" onclick="setStartDate('next_week')" class="btn btn-outline-secondary btn-sm">Next Week</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Weekly Options -->
+                                <div id="weekly_options" class="mb-3" style="display: none;">
+                                    <label class="form-label">
+                                        Days of Week <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="row">
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="monday" checked class="form-check-input" id="day_mon">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_mon" style="cursor: pointer;">Mon</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="tuesday" class="form-check-input" id="day_tue">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_tue" style="cursor: pointer;">Tue</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="wednesday" class="form-check-input" id="day_wed">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_wed" style="cursor: pointer;">Wed</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="thursday" class="form-check-input" id="day_thu">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_thu" style="cursor: pointer;">Thu</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="friday" class="form-check-input" id="day_fri">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_fri" style="cursor: pointer;">Fri</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="saturday" class="form-check-input" id="day_sat">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_sat" style="cursor: pointer;">Sat</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-6 col-lg-3 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" name="days" value="sunday" class="form-check-input" id="day_sun">
+                                                <label class="form-check-label w-100 text-center p-2 border rounded" for="day_sun" style="cursor: pointer;">Sun</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Monthly Options -->
+                                <div id="monthly_options" class="mb-3" style="display: none;">
+                                    <div class="col-md-4">
+                                        <label for="day" class="form-label">
+                                            Day of Month <span class="text-danger">*</span>
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            id="day" 
+                                            name="day" 
+                                            value="1" 
+                                            min="1" 
+                                            max="28" 
+                                            class="form-control">
+                                        <small class="text-muted">Day 1-28 (to avoid month-end issues)</small>
+                                    </div>
+                                </div>
+
+                                <!-- Interval Options -->
+                                <div id="interval_options" class="mb-3" style="display: none;">
+                                    <div class="col-md-4">
+                                        <label for="interval_minutes" class="form-label">
+                                            Interval <span class="text-danger">*</span>
+                                        </label>
+                                        <select id="interval_minutes" name="interval_minutes" class="form-select">
+                                            <option value="1">Every 1 minute</option>
+                                            <option value="5">Every 5 minutes</option>
+                                            <option value="10">Every 10 minutes</option>
+                                            <option value="15" selected>Every 15 minutes</option>
+                                            <option value="20">Every 20 minutes</option>
+                                            <option value="30">Every 30 minutes</option>
+                                            <option value="60">Every 1 hour</option>
+                                        </select>
+                                        <small class="text-muted">Script will run continuously at this interval</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Weekly Options -->
-                    <div id="weekly_options" class="hidden">
-                        <label class="block text-sm font-medium text-gray-700 mb-3">
-                            Days of Week <span class="text-red-500">*</span>
-                        </label>
-                        <div class="grid grid-cols-4 md:grid-cols-7 gap-3">
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="monday" checked class="sr-only">
-                                <span class="text-sm font-medium">Mon</span>
-                            </label>
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="tuesday" class="sr-only">
-                                <span class="text-sm font-medium">Tue</span>
-                            </label>
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="wednesday" class="sr-only">
-                                <span class="text-sm font-medium">Wed</span>
-                            </label>
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="thursday" class="sr-only">
-                                <span class="text-sm font-medium">Thu</span>
-                            </label>
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="friday" class="sr-only">
-                                <span class="text-sm font-medium">Fri</span>
-                            </label>
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="saturday" class="sr-only">
-                                <span class="text-sm font-medium">Sat</span>
-                            </label>
-                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
-                                <input type="checkbox" name="days" value="sunday" class="sr-only">
-                                <span class="text-sm font-medium">Sun</span>
-                            </label>
+                        <!-- Schedule Preview -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    Schedule Preview
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info mb-0">
+                                    <p id="schedule_preview" class="mb-0 fw-medium">
+                                        This schedule will run daily at 09:00
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Monthly Options -->
-                    <div id="monthly_options" class="hidden">
-                        <div class="max-w-xs">
-                            <label for="day" class="block text-sm font-medium text-gray-700 mb-2">
-                                Day of Month <span class="text-red-500">*</span>
-                            </label>
-                            <input 
-                                type="number" 
-                                id="day" 
-                                name="day" 
-                                value="1" 
-                                min="1" 
-                                max="28" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                            <p class="text-xs text-gray-500 mt-1">Day 1-28 (to avoid month-end issues)</p>
+                        <!-- Form Actions -->
+                        <div class="d-flex gap-3 mb-4">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-plus-circle me-2"></i>
+                                Create Schedule
+                            </button>
+                            <a href="{{ url_for('schedules') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>
+                                Cancel
+                            </a>
                         </div>
-                    </div>
-
-                    <!-- Interval Options -->
-                    <div id="interval_options" class="hidden">
-                        <div class="max-w-xs">
-                            <label for="interval_minutes" class="block text-sm font-medium text-gray-700 mb-2">
-                                Interval <span class="text-red-500">*</span>
-                            </label>
-                            <select 
-                                id="interval_minutes" 
-                                name="interval_minutes" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                                <option value="1">Every 1 minute</option>
-                                <option value="5">Every 5 minutes</option>
-                                <option value="10">Every 10 minutes</option>
-                                <option value="15" selected>Every 15 minutes</option>
-                                <option value="20">Every 20 minutes</option>
-                                <option value="30">Every 30 minutes</option>
-                                <option value="60">Every 1 hour</option>
-                            </select>
-                            <p class="text-xs text-gray-500 mt-1">Script will run continuously at this interval</p>
-                        </div>
-                    </div>
+                    </form>
                 </div>
             </div>
-
-            <!-- Schedule Preview -->
-            <div class="card">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        Schedule Preview
-                    </h3>
-                </div>
-                <div class="p-6">
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p id="schedule_preview" class="text-blue-800 font-medium">
-                            This schedule will run daily at 09:00
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Form Actions -->
-            <div class="flex space-x-4">
-                <button type="submit" class="btn btn-primary">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                    Create Schedule
-                </button>
-                <a href="{{ url_for('schedules') }}" class="btn btn-outline">Cancel</a>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 
@@ -354,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show dropdown on focus
     searchInput.addEventListener('focus', function() {
-        dropdown.classList.remove('hidden');
+        dropdown.style.display = 'block';
         if (!this.value) {
             resetFilter();
         }
@@ -370,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         filterOptions(query);
-        dropdown.classList.remove('hidden');
+        dropdown.style.display = 'block';
     });
     
     // Handle script selection
@@ -380,7 +360,7 @@ document.addEventListener('DOMContentLoaded', function() {
             e.stopPropagation();
             
             const value = this.dataset.value;
-            const scriptName = this.querySelector('.font-medium').textContent;
+            const scriptName = this.querySelector('.fw-medium').textContent;
             const scriptType = this.dataset.type.toUpperCase();
             
             selectedValue = value;
@@ -389,13 +369,13 @@ document.addEventListener('DOMContentLoaded', function() {
             searchInput.value = selectedText;
             hiddenInput.value = value;
             
-            dropdown.classList.add('hidden');
+            dropdown.style.display = 'none';
             updateScheduleName(scriptName);
             
             // Visual feedback
-            searchInput.classList.add('border-green-500', 'bg-green-50');
+            searchInput.classList.add('border-success', 'bg-light');
             setTimeout(() => {
-                searchInput.classList.remove('border-green-500', 'bg-green-50');
+                searchInput.classList.remove('border-success', 'bg-light');
             }, 2000);
         });
     });
@@ -403,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Close dropdown when clicking outside
     document.addEventListener('click', function(e) {
         if (!searchInput.closest('div').contains(e.target)) {
-            dropdown.classList.add('hidden');
+            dropdown.style.display = 'none';
         }
     });
     
@@ -455,16 +435,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const monthlyOptions = document.getElementById('monthly_options');
         const intervalOptions = document.getElementById('interval_options');
         
-        weeklyOptions.classList.add('hidden');
-        monthlyOptions.classList.add('hidden');
-        intervalOptions.classList.add('hidden');
+        weeklyOptions.style.display = 'none';
+        monthlyOptions.style.display = 'none';
+        intervalOptions.style.display = 'none';
         
         if (frequency === 'weekly') {
-            weeklyOptions.classList.remove('hidden');
+            weeklyOptions.style.display = 'block';
         } else if (frequency === 'monthly') {
-            monthlyOptions.classList.remove('hidden');
+            monthlyOptions.style.display = 'block';
         } else if (frequency === 'interval') {
-            intervalOptions.classList.remove('hidden');
+            intervalOptions.style.display = 'block';
         }
     }
     
@@ -566,5 +546,38 @@ function setStartDate(type) {
     // Trigger preview update
     startDateField.dispatchEvent(new Event('change'));
 }
+
+// Style updates for form checks
+document.querySelectorAll('input[name="frequency"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        // Update visual state for frequency selection
+        document.querySelectorAll('label[for^="freq_"]').forEach(label => {
+            label.classList.remove('border-primary', 'bg-light');
+        });
+        
+        if (this.checked) {
+            document.querySelector(`label[for="${this.id}"]`).classList.add('border-primary', 'bg-light');
+        }
+    });
+});
+
+// Initialize first frequency selection
+document.querySelector('input[name="frequency"]:checked').dispatchEvent(new Event('change'));
 </script>
+
+<style>
+.script-option:hover {
+    background-color: var(--bs-gray-100);
+}
+
+input[name="frequency"]:checked + label {
+    border-color: var(--bs-primary) !important;
+    background-color: var(--bs-light) !important;
+}
+
+input[name="days"]:checked + label {
+    border-color: var(--bs-primary) !important;
+    background-color: var(--bs-light) !important;
+}
+</style>
 {% endblock %}
