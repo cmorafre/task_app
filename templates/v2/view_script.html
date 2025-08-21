@@ -2,209 +2,130 @@
 
 {% block title %}View Script - {{ script.name }}{% endblock %}
 
+{% block page_title %}{{ script.name }}{% endblock %}
+{% block page_subtitle %}Script Details{% endblock %}
+
 {% block content %}
-<div class="space-y-6">
-    <!-- Page Header with Breadcrumb -->
-    <div class="flex flex-col space-y-4">
-        <!-- Breadcrumb -->
-        <nav class="flex" aria-label="Breadcrumb">
-            <ol class="inline-flex items-center space-x-1 md:space-x-3">
-                <li class="inline-flex items-center">
-                    <a href="{{ url_for('scripts') }}" class="text-gray-700 hover:text-primary-600 inline-flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
-                        </svg>
-                        Scripts
-                    </a>
-                </li>
-                <li>
-                    <div class="flex items-center">
-                        <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                        </svg>
-                        <span class="text-gray-500 ml-1 md:ml-2">{{ script.name }}</span>
-                    </div>
-                </li>
-            </ol>
-        </nav>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('scripts') }}" class="text-decoration-none">
+                            <i class="bi bi-file-code me-2"></i>Scripts
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ script.name }}</li>
+                </ol>
+            </nav>
 
-        <!-- Page Title -->
-        <div class="flex items-center justify-between">
-            <div>
-                <div class="flex items-center space-x-3">
-                    <div class="p-2 bg-primary-100 rounded-lg">
-                        <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-900">{{ script.name }}</h1>
-                        {% if script.description %}
-                        <p class="text-gray-600 mt-1">{{ script.description }}</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            
             <!-- Action Buttons -->
-            <div class="flex items-center space-x-3">
-                <a href="{{ url_for('edit_script', script_id=script.id) }}" 
-                   class="btn btn-secondary">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                    </svg>
-                    Edit
-                </a>
-                <a href="{{ url_for('scripts') }}" 
-                   class="btn btn-outline">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                    </svg>
-                    Back
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Script Info Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="card">
-            <div class="p-4">
-                <div class="flex items-center">
-                    <div class="p-2 bg-blue-100 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <p class="text-sm text-gray-500">Script Type</p>
-                        <p class="font-semibold text-gray-900">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {{ script.script_type.upper() }}
-                            </span>
-                        </p>
-                    </div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">{{ script.name }}</h2>
+                    {% if script.description %}
+                    <p class="text-muted mb-0">{{ script.description }}</p>
+                    {% endif %}
                 </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="p-4">
-                <div class="flex items-center">
-                    <div class="p-2 bg-green-100 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v1H8V5z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <p class="text-sm text-gray-500">File Size</p>
-                        <p class="font-semibold text-gray-900">{{ (script.file_size / 1024)|round(1) }} KB</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="p-4">
-                <div class="flex items-center">
-                    <div class="p-2 bg-purple-100 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <p class="text-sm text-gray-500">Created</p>
-                        <p class="font-semibold text-gray-900">{{ script.created_at.strftime('%Y-%m-%d') }}</p>
-                        <p class="text-xs text-gray-500">{{ script.created_at.strftime('%H:%M') }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="p-4">
-                <div class="flex items-center">
-                    <div class="p-2 bg-orange-100 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <p class="text-sm text-gray-500">Status</p>
-                        <p class="font-semibold text-green-600">Active</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Script Content -->
-    <div class="card">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                    <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-                    </svg>
-                    {{ script.name }}.{{ script.script_type }}
-                </h3>
-                <div class="flex items-center space-x-2">
-                    <form method="POST" action="{{ url_for('execute_script', script_id=script.id) }}" class="inline">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                            </svg>
-                            Execute
-                        </button>
-                    </form>
-                    <a href="{{ url_for('download_script', script_id=script.id) }}" class="btn btn-outline btn-sm">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Download
+                <div class="btn-group" role="group">
+                    <a href="{{ url_for('edit_script', script_id=script.id) }}" class="btn btn-warning">
+                        <i class="bi bi-pencil me-2"></i>Edit
+                    </a>
+                    <a href="{{ url_for('scripts') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Back
                     </a>
                 </div>
             </div>
-        </div>
-        <div class="p-0">
-            <div class="relative">
-                <pre class="bg-gray-900 text-gray-100 p-6 overflow-x-auto text-sm font-mono leading-relaxed"><code>{{ content }}</code></pre>
-                <button onclick="copyToClipboard()" class="absolute top-4 right-4 p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors duration-200" title="Copy to clipboard">
-                    <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
 
-    <!-- Recent Executions -->
-    <div class="card">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                Recent Executions
-            </h3>
-        </div>
-        <div class="p-6">
-            <div class="text-center py-8">
-                <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                </svg>
-                <h4 class="text-lg font-medium text-gray-900 mb-2">No executions yet</h4>
-                <p class="text-gray-600 mb-4">This script hasn't been executed recently.</p>
-                <form method="POST" action="{{ url_for('execute_script', script_id=script.id) }}" class="inline">
-                    <button type="submit" class="btn btn-primary">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Execute Now
-                    </button>
-                </form>
+            <!-- Script Info Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <i class="bi bi-file-earmark-code text-primary mb-2" style="font-size: 2rem;"></i>
+                            <h6 class="card-title">Script Type</h6>
+                            <span class="badge bg-secondary">{{ script.script_type.upper() }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <i class="bi bi-archive text-success mb-2" style="font-size: 2rem;"></i>
+                            <h6 class="card-title">File Size</h6>
+                            <p class="card-text h5 mb-0">{{ (script.file_size / 1024)|round(1) }} KB</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <i class="bi bi-calendar text-info mb-2" style="font-size: 2rem;"></i>
+                            <h6 class="card-title">Created</h6>
+                            <p class="card-text mb-0">{{ script.created_at.strftime('%Y-%m-%d') }}</p>
+                            <small class="text-muted">{{ script.created_at.strftime('%H:%M') }}</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-warning">
+                        <div class="card-body text-center">
+                            <i class="bi bi-heart text-warning mb-2" style="font-size: 2rem;"></i>
+                            <h6 class="card-title">Status</h6>
+                            <span class="badge bg-success">Active</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Script Content -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-code-slash me-2"></i>
+                        {{ script.name }}.{{ script.script_type }}
+                    </h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <form method="POST" action="{{ url_for('execute_script', script_id=script.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-play me-1"></i>Execute
+                            </button>
+                        </form>
+                        <a href="{{ url_for('download_script', script_id=script.id) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i>Download
+                        </a>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="copyToClipboard()">
+                            <i class="bi bi-clipboard me-1"></i>Copy
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <pre class="bg-dark text-light p-3 mb-0" style="max-height: 500px; overflow-y: auto;"><code id="scriptContent">{{ content }}</code></pre>
+                </div>
+            </div>
+
+            <!-- Recent Executions -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>
+                        Recent Executions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center py-4">
+                        <i class="bi bi-clipboard-data text-muted mb-3" style="font-size: 3rem;"></i>
+                        <h6 class="text-muted">No executions yet</h6>
+                        <p class="text-muted mb-3">This script hasn't been executed recently.</p>
+                        <form method="POST" action="{{ url_for('execute_script', script_id=script.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-play me-2"></i>Execute Now
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -212,19 +133,22 @@
 
 <script>
 function copyToClipboard() {
-    const codeContent = document.querySelector('pre code').textContent;
+    const codeContent = document.getElementById('scriptContent').textContent;
     navigator.clipboard.writeText(codeContent).then(function() {
         // Show success feedback
-        const button = document.querySelector('button[onclick="copyToClipboard()"]');
+        const button = event.target.closest('button');
         const originalContent = button.innerHTML;
-        button.innerHTML = `
-            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
-        `;
+        button.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+        button.classList.remove('btn-outline-info');
+        button.classList.add('btn-success');
+        
         setTimeout(() => {
             button.innerHTML = originalContent;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-info');
         }, 2000);
+    }).catch(function() {
+        alert('Failed to copy to clipboard');
     });
 }
 </script>

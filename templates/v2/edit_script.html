@@ -2,220 +2,169 @@
 
 {% block title %}Edit Script - {{ script.name }}{% endblock %}
 
+{% block page_title %}Edit Script{% endblock %}
+{% block page_subtitle %}Modify {{ script.name }}{% endblock %}
+
 {% block content %}
-<div class="space-y-6">
-    <!-- Page Header with Breadcrumb -->
-    <div class="flex flex-col space-y-4">
-        <!-- Breadcrumb -->
-        <nav class="flex" aria-label="Breadcrumb">
-            <ol class="inline-flex items-center space-x-1 md:space-x-3">
-                <li class="inline-flex items-center">
-                    <a href="{{ url_for('scripts') }}" class="text-gray-700 hover:text-primary-600 inline-flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
-                        </svg>
-                        Scripts
-                    </a>
-                </li>
-                <li>
-                    <div class="flex items-center">
-                        <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                        </svg>
-                        <span class="text-gray-500 ml-1 md:ml-2">Edit {{ script.name }}</span>
-                    </div>
-                </li>
-            </ol>
-        </nav>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('scripts') }}" class="text-decoration-none">
+                            <i class="bi bi-file-code me-2"></i>Scripts
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">Edit {{ script.name }}</li>
+                </ol>
+            </nav>
 
-        <!-- Page Title -->
-        <div class="flex items-center">
-            <div class="p-2 bg-primary-100 rounded-lg mr-3">
-                <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                </svg>
-            </div>
-            <div>
-                <h1 class="text-2xl font-bold text-gray-900">Edit Script</h1>
-                <p class="text-gray-600 mt-1">Modify {{ script.name }} content and settings</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Form -->
-    <form method="POST" class="space-y-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Script Content -->
-            <div class="lg:col-span-2">
-                <div class="card">
-                    <div class="px-6 py-4 border-b border-gray-200">
-                        <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                            <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-                            </svg>
-                            Script Content
-                        </h3>
-                    </div>
-                    <div class="p-0">
-                        <div class="relative">
-                            <textarea 
-                                name="content" 
-                                class="w-full h-96 p-4 font-mono text-sm bg-gray-900 text-gray-100 border-0 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-inset" 
-                                placeholder="Enter your script content here..."
-                                required>{{ content }}</textarea>
-                            <div class="absolute top-2 right-2 flex space-x-2">
-                                <button type="button" onclick="formatCode()" class="p-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 transition-colors duration-200" title="Format code">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
-                                    </svg>
-                                </button>
-                                <button type="button" onclick="toggleFullscreen()" class="p-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 transition-colors duration-200" title="Toggle fullscreen">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                                    </svg>
-                                </button>
+            <!-- Edit Form -->
+            <form method="POST">
+                <div class="row">
+                    <!-- Script Content -->
+                    <div class="col-lg-8">
+                        <div class="card mb-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-code-slash me-2"></i>Script Content
+                                </h5>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary" onclick="formatCode()" title="Format Code">
+                                        <i class="bi bi-code"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+                                        <i class="bi bi-arrows-fullscreen"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-info" onclick="previewScript()" title="Preview">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Script Information -->
-            <div class="lg:col-span-1">
-                <div class="space-y-6">
-                    <!-- Basic Info -->
-                    <div class="card">
-                        <div class="px-6 py-4 border-b border-gray-200">
-                            <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                                <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                                Script Information
-                            </h3>
-                        </div>
-                        <div class="p-6 space-y-4">
-                            <div>
-                                <label for="name" class="block text-sm font-medium text-gray-700 mb-2">Script Name</label>
-                                <input 
-                                    type="text" 
-                                    id="name" 
-                                    name="name" 
-                                    value="{{ script.name }}" 
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    required>
-                            </div>
-
-                            <div>
-                                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <div class="card-body p-0">
                                 <textarea 
-                                    id="description" 
-                                    name="description" 
-                                    rows="3" 
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    placeholder="Describe what this script does...">{{ script.description or '' }}</textarea>
+                                    name="content" 
+                                    id="scriptContent"
+                                    class="form-control border-0 font-monospace" 
+                                    rows="20" 
+                                    style="resize: none; min-height: 400px;"
+                                    required>{{ content }}</textarea>
                             </div>
+                        </div>
+                    </div>
 
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">File Type</label>
-                                <div class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
-                                    {{ script.script_type.upper() }}
+                    <!-- Script Information & Actions -->
+                    <div class="col-lg-4">
+                        <!-- Basic Information -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-info-circle me-2"></i>Script Information
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">Script Name</label>
+                                    <input type="text" class="form-control" id="name" name="name" value="{{ script.name }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="description" name="description" rows="3">{{ script.description or '' }}</textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">File Type</label>
+                                    <div>
+                                        <span class="badge bg-secondary">{{ script.script_type.upper() }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-gear me-2"></i>Actions
+                                </h6>
+                            </div>
+                            <div class="card-body d-grid gap-2">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-check-circle me-2"></i>Save Changes
+                                </button>
+                                <button type="button" class="btn btn-info" onclick="previewScript()">
+                                    <i class="bi bi-eye me-2"></i>Preview
+                                </button>
+                                <a href="{{ url_for('view_script', script_id=script.id) }}" class="btn btn-outline-secondary">
+                                    <i class="bi bi-eye me-2"></i>View Script
+                                </a>
+                                <a href="{{ url_for('scripts') }}" class="btn btn-outline-dark">
+                                    <i class="bi bi-arrow-left me-2"></i>Back to Scripts
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- File Statistics -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-bar-chart me-2"></i>File Statistics
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <div class="border-end">
+                                            <p class="mb-1 text-muted small">File Size</p>
+                                            <p class="h6 mb-0">{{ (script.file_size / 1024)|round(1) }} KB</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <p class="mb-1 text-muted small">Created</p>
+                                        <p class="h6 mb-0">{{ script.created_at.strftime('%d/%m') }}</p>
+                                    </div>
+                                </div>
+                                <hr>
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <div class="border-end">
+                                            <p class="mb-1 text-muted small">Lines</p>
+                                            <p class="h6 mb-0" id="lineCount">-</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <p class="mb-1 text-muted small">Characters</p>
+                                        <p class="h6 mb-0" id="charCount">-</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Actions -->
-                    <div class="card">
-                        <div class="px-6 py-4 border-b border-gray-200">
-                            <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                                <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path>
-                                </svg>
-                                Actions
-                            </h3>
-                        </div>
-                        <div class="p-6 space-y-3">
-                            <button type="submit" class="w-full btn btn-primary">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                </svg>
-                                Save Changes
-                            </button>
-
-                            <button type="button" onclick="previewScript()" class="w-full btn btn-secondary">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                </svg>
-                                Preview
-                            </button>
-
-                            <a href="{{ url_for('view_script', script_id=script.id) }}" class="w-full btn btn-outline">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                </svg>
-                                View Script
-                            </a>
-
-                            <a href="{{ url_for('scripts') }}" class="w-full btn btn-outline">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                                </svg>
-                                Back to Scripts
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- File Statistics -->
-                    <div class="card">
-                        <div class="px-6 py-4 border-b border-gray-200">
-                            <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                                <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                                </svg>
-                                File Statistics
-                            </h3>
-                        </div>
-                        <div class="p-6 space-y-3">
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-600">File Size</span>
-                                <span class="text-sm font-medium text-gray-900">{{ (script.file_size / 1024)|round(1) }} KB</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-600">Created</span>
-                                <span class="text-sm font-medium text-gray-900">{{ script.created_at.strftime('%Y-%m-%d') }}</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-600">Lines</span>
-                                <span class="text-sm font-medium text-gray-900" id="lineCount">-</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-600">Characters</span>
-                                <span class="text-sm font-medium text-gray-900" id="charCount">-</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
-            </div>
+            </form>
         </div>
-    </form>
+    </div>
 </div>
 
 <!-- Preview Modal -->
-<div id="previewModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
-        <div class="mt-3">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Script Preview</h3>
-                <button onclick="closePreview()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewModalLabel">
+                    <i class="bi bi-eye me-2"></i>Script Preview
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto">
-                <pre class="text-gray-100 text-sm font-mono" id="previewContent"></pre>
+            <div class="modal-body">
+                <pre class="bg-dark text-light p-3 mb-0" style="max-height: 500px; overflow-y: auto;"><code id="previewContent"></code></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="copyPreviewToClipboard()">
+                    <i class="bi bi-clipboard me-2"></i>Copy to Clipboard
+                </button>
             </div>
         </div>
     </div>
@@ -223,7 +172,7 @@
 
 <script>
 // Real-time statistics update
-const textarea = document.querySelector('textarea[name="content"]');
+const textarea = document.getElementById('scriptContent');
 const lineCount = document.getElementById('lineCount');
 const charCount = document.getElementById('charCount');
 
@@ -239,30 +188,29 @@ function updateStats() {
 textarea.addEventListener('input', updateStats);
 updateStats(); // Initial count
 
-// Format code (basic indentation fix)
+// Format code (basic indentation fix for Python)
 function formatCode() {
     const content = textarea.value;
-    // Basic Python indentation formatting
     const lines = content.split('\n');
     let indentLevel = 0;
     const formatted = lines.map(line => {
         const trimmed = line.trim();
+        if (trimmed === '' || trimmed.startsWith('#')) {
+            return trimmed;
+        }
         if (trimmed.endsWith(':')) {
             const result = '    '.repeat(indentLevel) + trimmed;
             indentLevel++;
             return result;
-        } else if (trimmed === '' || trimmed.startsWith('#')) {
-            return trimmed;
-        } else {
-            if (trimmed.startsWith('except') || trimmed.startsWith('elif') || 
-                trimmed.startsWith('else') || trimmed.startsWith('finally')) {
-                indentLevel = Math.max(0, indentLevel - 1);
-                const result = '    '.repeat(indentLevel) + trimmed;
-                indentLevel++;
-                return result;
-            }
-            return '    '.repeat(indentLevel) + trimmed;
         }
+        if (trimmed.startsWith('except') || trimmed.startsWith('elif') || 
+            trimmed.startsWith('else') || trimmed.startsWith('finally')) {
+            indentLevel = Math.max(0, indentLevel - 1);
+            const result = '    '.repeat(indentLevel) + trimmed;
+            indentLevel++;
+            return result;
+        }
+        return '    '.repeat(indentLevel) + trimmed;
     }).join('\n');
     
     textarea.value = formatted;
@@ -271,24 +219,24 @@ function formatCode() {
 
 // Toggle fullscreen
 function toggleFullscreen() {
-    const container = textarea.closest('.card');
-    if (container.classList.contains('fullscreen')) {
-        container.classList.remove('fullscreen');
-        container.style.position = '';
-        container.style.top = '';
-        container.style.left = '';
-        container.style.width = '';
-        container.style.height = '';
-        container.style.zIndex = '';
-        textarea.style.height = '24rem';
+    const card = textarea.closest('.card');
+    if (card.classList.contains('fullscreen-editor')) {
+        card.classList.remove('fullscreen-editor');
+        card.style.position = '';
+        card.style.top = '';
+        card.style.left = '';
+        card.style.width = '';
+        card.style.height = '';
+        card.style.zIndex = '';
+        textarea.style.height = '400px';
     } else {
-        container.classList.add('fullscreen');
-        container.style.position = 'fixed';
-        container.style.top = '0';
-        container.style.left = '0';
-        container.style.width = '100vw';
-        container.style.height = '100vh';
-        container.style.zIndex = '9999';
+        card.classList.add('fullscreen-editor');
+        card.style.position = 'fixed';
+        card.style.top = '0';
+        card.style.left = '0';
+        card.style.width = '100vw';
+        card.style.height = '100vh';
+        card.style.zIndex = '9999';
         textarea.style.height = 'calc(100vh - 120px)';
     }
 }
@@ -297,11 +245,26 @@ function toggleFullscreen() {
 function previewScript() {
     const content = textarea.value;
     document.getElementById('previewContent').textContent = content;
-    document.getElementById('previewModal').classList.remove('hidden');
+    const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+    modal.show();
 }
 
-function closePreview() {
-    document.getElementById('previewModal').classList.add('hidden');
+// Copy preview to clipboard
+function copyPreviewToClipboard() {
+    const content = document.getElementById('previewContent').textContent;
+    navigator.clipboard.writeText(content).then(function() {
+        const button = event.target.closest('button');
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check me-2"></i>Copied!';
+        button.classList.remove('btn-primary');
+        button.classList.add('btn-success');
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-primary');
+        }, 2000);
+    });
 }
 
 // Keyboard shortcuts
@@ -322,16 +285,32 @@ textarea.addEventListener('keydown', function(e) {
         e.preventDefault();
         document.querySelector('form').submit();
     }
+    
+    // Ctrl+P to preview
+    if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        previewScript();
+    }
 });
 
-// Auto-save draft (optional feature)
+// Auto-save indication (visual feedback only)
 let autoSaveTimer;
 textarea.addEventListener('input', function() {
     clearTimeout(autoSaveTimer);
     autoSaveTimer = setTimeout(() => {
         // Could implement auto-save to localStorage here
-        console.log('Auto-saving draft...');
+        console.log('Auto-save indication...');
     }, 2000);
 });
 </script>
+
+<style>
+.fullscreen-editor {
+    background: white !important;
+}
+
+.font-monospace {
+    font-family: 'Monaco', 'Courier New', monospace !important;
+}
+</style>
 {% endblock %}
