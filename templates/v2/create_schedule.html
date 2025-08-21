@@ -1,0 +1,570 @@
+{% extends "v2/base.html" %}
+
+{% block title %}Create Schedule - ScriptFlow{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header with Breadcrumb -->
+    <div class="flex flex-col space-y-4">
+        <!-- Breadcrumb -->
+        <nav class="flex" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{{ url_for('schedules') }}" class="text-gray-700 hover:text-primary-600 inline-flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
+                        </svg>
+                        Schedules
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span class="text-gray-500 ml-1 md:ml-2">Create Schedule</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+
+        <!-- Page Title -->
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="p-2 bg-primary-100 rounded-lg mr-3">
+                    <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Create New Schedule</h1>
+                    <p class="text-gray-600 mt-1">Set up automated script execution</p>
+                </div>
+            </div>
+            <a href="{{ url_for('schedules') }}" class="btn btn-outline">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Back to Schedules
+            </a>
+        </div>
+    </div>
+
+    <!-- Create Form -->
+    <div class="max-w-4xl">
+        <form method="POST" class="space-y-6">
+            <!-- Basic Settings -->
+            <div class="card">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path>
+                        </svg>
+                        Basic Settings
+                    </h3>
+                </div>
+                <div class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Script Selection -->
+                        <div>
+                            <label for="script_search" class="block text-sm font-medium text-gray-700 mb-2">
+                                Script <span class="text-red-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <input 
+                                    type="text" 
+                                    id="script_search" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    placeholder="Type to search scripts..." 
+                                    autocomplete="off">
+                                <input type="hidden" id="script_id" name="script_id" required>
+                                <div id="script_dropdown" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden">
+                                    {% for script in scripts %}
+                                    <div class="script-option cursor-pointer px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0" 
+                                         data-value="{{ script.id }}"
+                                         data-name="{{ script.name.lower() }}"
+                                         data-type="{{ script.script_type.lower() }}">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                {{ script.script_type.upper() }}
+                                            </span>
+                                            <div>
+                                                <div class="font-medium text-gray-900">{{ script.name }}</div>
+                                                {% if script.description %}
+                                                <div class="text-sm text-gray-500">{{ script.description[:60] }}{% if script.description|length > 60 %}...{% endif %}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Schedule Name -->
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                                Schedule Name <span class="text-red-500">*</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                id="name" 
+                                name="name" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                placeholder="e.g., Daily Backup" 
+                                required>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <div>
+                        <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea 
+                            id="description" 
+                            name="description" 
+                            rows="3" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            placeholder="Optional description of what this schedule does..."></textarea>
+                    </div>
+
+                    <!-- Active Toggle -->
+                    <div class="flex items-center space-x-3">
+                        <input type="checkbox" id="is_active" name="is_active" checked class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="is_active" class="text-sm font-medium text-gray-700">
+                            Active Schedule
+                            <span class="block text-xs text-gray-500">Enable this schedule to run automatically</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule Pattern -->
+            <div class="card">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        Schedule Pattern
+                    </h3>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Frequency Selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            Frequency <span class="text-red-500">*</span>
+                        </label>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="radio" name="frequency" value="daily" checked class="sr-only">
+                                <div class="flex items-center">
+                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <span class="text-sm font-medium">Daily</span>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="radio" name="frequency" value="weekly" class="sr-only">
+                                <div class="flex items-center">
+                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <span class="text-sm font-medium">Weekly</span>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="radio" name="frequency" value="monthly" class="sr-only">
+                                <div class="flex items-center">
+                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <span class="text-sm font-medium">Monthly</span>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="radio" name="frequency" value="interval" class="sr-only">
+                                <div class="flex items-center">
+                                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="text-sm font-medium">Interval</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Time and Date Settings -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label for="time" class="block text-sm font-medium text-gray-700 mb-2">
+                                Time <span class="text-red-500">*</span>
+                            </label>
+                            <input 
+                                type="time" 
+                                id="time" 
+                                name="time" 
+                                value="09:00" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                required>
+                        </div>
+                        
+                        <div>
+                            <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                            <input 
+                                type="date" 
+                                id="start_date" 
+                                name="start_date" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Leave empty to start today</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Quick Start</label>
+                            <div class="space-x-2">
+                                <button type="button" onclick="setStartDate('today')" class="btn btn-outline btn-sm">Today</button>
+                                <button type="button" onclick="setStartDate('tomorrow')" class="btn btn-outline btn-sm">Tomorrow</button>
+                                <button type="button" onclick="setStartDate('next_week')" class="btn btn-outline btn-sm">Next Week</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Weekly Options -->
+                    <div id="weekly_options" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            Days of Week <span class="text-red-500">*</span>
+                        </label>
+                        <div class="grid grid-cols-4 md:grid-cols-7 gap-3">
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="monday" checked class="sr-only">
+                                <span class="text-sm font-medium">Mon</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="tuesday" class="sr-only">
+                                <span class="text-sm font-medium">Tue</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="wednesday" class="sr-only">
+                                <span class="text-sm font-medium">Wed</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="thursday" class="sr-only">
+                                <span class="text-sm font-medium">Thu</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="friday" class="sr-only">
+                                <span class="text-sm font-medium">Fri</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="saturday" class="sr-only">
+                                <span class="text-sm font-medium">Sat</span>
+                            </label>
+                            <label class="flex items-center justify-center p-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50">
+                                <input type="checkbox" name="days" value="sunday" class="sr-only">
+                                <span class="text-sm font-medium">Sun</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Monthly Options -->
+                    <div id="monthly_options" class="hidden">
+                        <div class="max-w-xs">
+                            <label for="day" class="block text-sm font-medium text-gray-700 mb-2">
+                                Day of Month <span class="text-red-500">*</span>
+                            </label>
+                            <input 
+                                type="number" 
+                                id="day" 
+                                name="day" 
+                                value="1" 
+                                min="1" 
+                                max="28" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Day 1-28 (to avoid month-end issues)</p>
+                        </div>
+                    </div>
+
+                    <!-- Interval Options -->
+                    <div id="interval_options" class="hidden">
+                        <div class="max-w-xs">
+                            <label for="interval_minutes" class="block text-sm font-medium text-gray-700 mb-2">
+                                Interval <span class="text-red-500">*</span>
+                            </label>
+                            <select 
+                                id="interval_minutes" 
+                                name="interval_minutes" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                                <option value="1">Every 1 minute</option>
+                                <option value="5">Every 5 minutes</option>
+                                <option value="10">Every 10 minutes</option>
+                                <option value="15" selected>Every 15 minutes</option>
+                                <option value="20">Every 20 minutes</option>
+                                <option value="30">Every 30 minutes</option>
+                                <option value="60">Every 1 hour</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Script will run continuously at this interval</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule Preview -->
+            <div class="card">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Schedule Preview
+                    </h3>
+                </div>
+                <div class="p-6">
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p id="schedule_preview" class="text-blue-800 font-medium">
+                            This schedule will run daily at 09:00
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex space-x-4">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    Create Schedule
+                </button>
+                <a href="{{ url_for('schedules') }}" class="btn btn-outline">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Script search functionality
+    const searchInput = document.getElementById('script_search');
+    const dropdown = document.getElementById('script_dropdown');
+    const hiddenInput = document.getElementById('script_id');
+    const options = document.querySelectorAll('.script-option');
+    
+    let selectedValue = '';
+    let selectedText = '';
+    
+    // Show dropdown on focus
+    searchInput.addEventListener('focus', function() {
+        dropdown.classList.remove('hidden');
+        if (!this.value) {
+            resetFilter();
+        }
+    });
+    
+    // Filter options as user types
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        
+        if (this.value !== selectedText) {
+            selectedValue = '';
+            hiddenInput.value = '';
+        }
+        
+        filterOptions(query);
+        dropdown.classList.remove('hidden');
+    });
+    
+    // Handle script selection
+    options.forEach(option => {
+        option.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const value = this.dataset.value;
+            const scriptName = this.querySelector('.font-medium').textContent;
+            const scriptType = this.dataset.type.toUpperCase();
+            
+            selectedValue = value;
+            selectedText = `[${scriptType}] ${scriptName}`;
+            
+            searchInput.value = selectedText;
+            hiddenInput.value = value;
+            
+            dropdown.classList.add('hidden');
+            updateScheduleName(scriptName);
+            
+            // Visual feedback
+            searchInput.classList.add('border-green-500', 'bg-green-50');
+            setTimeout(() => {
+                searchInput.classList.remove('border-green-500', 'bg-green-50');
+            }, 2000);
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!searchInput.closest('div').contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+    
+    function filterOptions(query) {
+        options.forEach(option => {
+            const name = option.dataset.name;
+            const type = option.dataset.type;
+            const description = option.textContent.toLowerCase();
+            
+            const matches = !query || 
+                           name.includes(query) || 
+                           type.includes(query) || 
+                           description.includes(query);
+            
+            option.style.display = matches ? 'block' : 'none';
+        });
+    }
+    
+    function resetFilter() {
+        options.forEach(option => {
+            option.style.display = 'block';
+        });
+    }
+    
+    function updateScheduleName(scriptName) {
+        const nameField = document.getElementById('name');
+        if (!nameField.value && scriptName) {
+            const frequency = document.querySelector('input[name="frequency"]:checked').value;
+            const frequencyName = frequency.charAt(0).toUpperCase() + frequency.slice(1);
+            nameField.value = `${frequencyName} ${scriptName}`;
+        }
+    }
+    
+    // Frequency changes
+    document.addEventListener('change', function(e) {
+        if (e.target.name === 'frequency') {
+            updateFrequencyOptions();
+            updatePreview();
+        }
+        if (e.target.name === 'days' || e.target.name === 'time' || e.target.id === 'day' || 
+            e.target.id === 'start_date' || e.target.id === 'interval_minutes') {
+            updatePreview();
+        }
+    });
+    
+    function updateFrequencyOptions() {
+        const frequency = document.querySelector('input[name="frequency"]:checked').value;
+        const weeklyOptions = document.getElementById('weekly_options');
+        const monthlyOptions = document.getElementById('monthly_options');
+        const intervalOptions = document.getElementById('interval_options');
+        
+        weeklyOptions.classList.add('hidden');
+        monthlyOptions.classList.add('hidden');
+        intervalOptions.classList.add('hidden');
+        
+        if (frequency === 'weekly') {
+            weeklyOptions.classList.remove('hidden');
+        } else if (frequency === 'monthly') {
+            monthlyOptions.classList.remove('hidden');
+        } else if (frequency === 'interval') {
+            intervalOptions.classList.remove('hidden');
+        }
+    }
+    
+    function updatePreview() {
+        const frequency = document.querySelector('input[name="frequency"]:checked').value;
+        const time = document.getElementById('time').value;
+        const startDate = document.getElementById('start_date').value;
+        const preview = document.getElementById('schedule_preview');
+        
+        let previewText = '';
+        let startText = '';
+        
+        if (startDate) {
+            const startDateObj = new Date(startDate + 'T00:00:00');
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            
+            const todayStr = today.toISOString().split('T')[0];
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            
+            if (startDate === todayStr) {
+                startText = ' starting today';
+            } else if (startDate === tomorrowStr) {
+                startText = ' starting tomorrow';
+            } else {
+                startText = ` starting ${startDateObj.toLocaleDateString()}`;
+            }
+        }
+        
+        if (frequency === 'daily') {
+            previewText = `This schedule will run daily at ${time}${startText}`;
+        } else if (frequency === 'weekly') {
+            const checkedDays = Array.from(document.querySelectorAll('input[name="days"]:checked'))
+                .map(cb => cb.value)
+                .map(day => day.charAt(0).toUpperCase() + day.slice(1));
+            
+            if (checkedDays.length === 0) {
+                previewText = 'Please select at least one day of the week';
+            } else if (checkedDays.length === 1) {
+                previewText = `This schedule will run every ${checkedDays[0]} at ${time}${startText}`;
+            } else {
+                previewText = `This schedule will run on ${checkedDays.join(', ')} at ${time}${startText}`;
+            }
+        } else if (frequency === 'monthly') {
+            const day = document.getElementById('day').value || '1';
+            const suffix = getDaySuffix(day);
+            previewText = `This schedule will run on the ${day}${suffix} of each month at ${time}${startText}`;
+        } else if (frequency === 'interval') {
+            const intervalMinutes = document.getElementById('interval_minutes').value || '15';
+            let intervalText = intervalMinutes === '60' ? 'every hour' : `every ${intervalMinutes} minutes`;
+            let timeText = startDate || time !== '09:00' ? ` beginning at ${time}` : '';
+            previewText = `This schedule will run ${intervalText}${timeText}${startText}`;
+        }
+        
+        preview.textContent = previewText;
+    }
+    
+    function getDaySuffix(day) {
+        const j = day % 10;
+        const k = day % 100;
+        
+        if (j == 1 && k != 11) return 'st';
+        if (j == 2 && k != 12) return 'nd';
+        if (j == 3 && k != 13) return 'rd';
+        return 'th';
+    }
+    
+    // Initialize
+    updateFrequencyOptions();
+    updatePreview();
+});
+
+// Start date helper functions
+function setStartDate(type) {
+    const startDateField = document.getElementById('start_date');
+    const today = new Date();
+    
+    function formatDateForInput(date) {
+        return date.toISOString().split('T')[0];
+    }
+    
+    switch(type) {
+        case 'today':
+            startDateField.value = formatDateForInput(today);
+            break;
+        case 'tomorrow':
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            startDateField.value = formatDateForInput(tomorrow);
+            break;
+        case 'next_week':
+            const nextWeek = new Date(today);
+            nextWeek.setDate(today.getDate() + 7);
+            startDateField.value = formatDateForInput(nextWeek);
+            break;
+    }
+    
+    // Trigger preview update
+    startDateField.dispatchEvent(new Event('change'));
+}
+</script>
+{% endblock %}
