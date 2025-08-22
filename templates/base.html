@@ -394,6 +394,29 @@
                 </a>
             </div>
 
+            <!-- NEW: Integration Section (NON-BREAKING ADDITION) -->
+            <div class="nav-section">
+                <div class="nav-section-title">Integration</div>
+                <a href="{{ url_for('integrations.list_integrations') }}" class="nav-item{% if request.endpoint == 'integrations.list_integrations' or request.endpoint == 'integrations.new_integration' or request.endpoint == 'integrations.view_integration' or request.endpoint == 'integrations.edit_integration' %} active{% endif %}">
+                    <div class="nav-icon">
+                        <i class="bi bi-diagram-3"></i>
+                    </div>
+                    <span class="nav-text">Integrations</span>
+                </a>
+                <a href="{{ url_for('datasources.list_datasources') }}" class="nav-item{% if request.endpoint and 'datasources' in request.endpoint %} active{% endif %}">
+                    <div class="nav-icon">
+                        <i class="bi bi-database"></i>
+                    </div>
+                    <span class="nav-text">Data Sources</span>
+                </a>
+                <a href="{{ url_for('integrations.list_executions') }}" class="nav-item{% if request.endpoint == 'integrations.list_executions' or request.endpoint == 'integrations.view_execution' %} active{% endif %}">
+                    <div class="nav-icon">
+                        <i class="bi bi-arrow-repeat"></i>
+                    </div>
+                    <span class="nav-text">ETL Logs</span>
+                </a>
+            </div>
+
             {% if current_user.is_admin %}
             <div class="nav-section">
                 <div class="nav-section-title">Admin</div>

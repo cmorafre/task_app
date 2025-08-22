@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}ETL Execution Logs - ScriptFlow{% endblock %}
+{% block page_title %}ETL Execution History{% endblock %}
+{% block page_subtitle %}View integration execution logs and status{% endblock %}
+
+{% block content %}
+<!-- Action Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-end align-items-center">
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleFilters()">
+                        <i class="bi bi-funnel me-1"></i>Filters
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshExecutions()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                    <a href="/integrations/" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-left me-2"></i>Back to Integrations
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Panel -->
+<div class="row mb-4" id="filtersPanel" style="display: none;">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-funnel text-info"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">Filter Executions</h6>
+            </div>
+            
+            <form id="filterForm" method="GET" class="row g-3">
+                <!-- Integration Filter -->
+                <div class="col-md-3">
+                    <label for="integration" class="form-label small fw-medium">Integration</label>
+                    <select class="form-select" id="integration" name="integration">
+                        <option value="">All Integrations</option>
+                        {% for integration in integrations %}
+                        <option value="{{ integration.id }}" {% if integration_filter == integration.id|string %}selected{% endif %}>
+                            {{ integration.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Status Filter -->
+                <div class="col-md-2">
+                    <label for="status" class="form-label small fw-medium">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">All Status</option>
+                        <option value="running" {% if status_filter == 'running' %}selected{% endif %}>Running</option>
+                        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                        <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+                        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                
+                <!-- Date Filter -->
+                <div class="col-md-2">
+                    <label for="date" class="form-label small fw-medium">Date Range</label>
+                    <select class="form-select" id="date" name="date">
+                        <option value="">All Time</option>
+                        <option value="today" {% if date_filter == 'today' %}selected{% endif %}>Today</option>
+                        <option value="week" {% if date_filter == 'week' %}selected{% endif %}>Last Week</option>
+                        <option value="month" {% if date_filter == 'month' %}selected{% endif %}>Last Month</option>
+                    </select>
+                </div>
+                
+                <!-- Sort -->
+                <div class="col-md-3">
+                    <label for="sort" class="form-label small fw-medium">Sort By</label>
+                    <select class="form-select" id="sort" name="sort">
+                        <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>Most Recent</option>
+                        <option value="oldest" {% if sort_by == 'oldest' %}selected{% endif %}>Oldest First</option>
+                    </select>
+                </div>
+                
+                <!-- Actions -->
+                <div class="col-12">
+                    <div class="d-flex gap-2 pt-2">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search me-1"></i>Apply Filters
+                        </button>
+                        <a href="/integrations/executions" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-x-circle me-1"></i>Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Executions List -->
+<div class="row">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-arrow-repeat me-2"></i>Execution History
+                </h6>
+                <span class="badge bg-secondary">{{ executions.total }} total</span>
+            </div>
+            
+            {% if executions.items %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Integration</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Records</th>
+                            <th>Trigger</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for execution in executions.items %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary bg-opacity-10 p-2 rounded-circle me-3">
+                                        <i class="bi bi-diagram-3 text-primary"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-medium">{{ execution.integration.name }}</div>
+                                        <small class="text-muted">ID: {{ execution.integration_id }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if execution.status == 'running' %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Running
+                                </span>
+                                {% elif execution.status == 'completed' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle me-1"></i>Completed
+                                </span>
+                                {% elif execution.status == 'failed' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle me-1"></i>Failed
+                                </span>
+                                {% elif execution.status == 'cancelled' %}
+                                <span class="badge bg-warning">
+                                    <i class="bi bi-dash-circle me-1"></i>Cancelled
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ execution.status|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div>{{ execution.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                                <small class="text-muted">{{ execution.started_at.strftime('%A') }}</small>
+                            </td>
+                            <td>
+                                {% if execution.completed_at %}
+                                    {% set duration = (execution.completed_at - execution.started_at).total_seconds() %}
+                                    {% if duration < 60 %}
+                                        {{ "%.1f"|format(duration) }}s
+                                    {% elif duration < 3600 %}
+                                        {{ "%.1f"|format(duration/60) }}m
+                                    {% else %}
+                                        {{ "%.1f"|format(duration/3600) }}h
+                                    {% endif %}
+                                {% elif execution.status == 'running' %}
+                                    <span class="text-info">
+                                        <i class="bi bi-clock"></i> Running...
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if execution.records_processed is not none %}
+                                    <div class="fw-medium">{{ execution.records_processed }}</div>
+                                    {% if execution.records_failed and execution.records_failed > 0 %}
+                                        <small class="text-danger">{{ execution.records_failed }} failed</small>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if execution.trigger_type %}
+                                <span class="badge bg-light text-dark">
+                                    {% if execution.trigger_type.value == 'manual' %}
+                                        <i class="bi bi-hand-index me-1"></i>Manual
+                                    {% elif execution.trigger_type.value == 'scheduled' %}
+                                        <i class="bi bi-calendar3 me-1"></i>Scheduled
+                                    {% elif execution.trigger_type.value == 'api' %}
+                                        <i class="bi bi-code me-1"></i>API
+                                    {% else %}
+                                        {{ execution.trigger_type.value|title }}
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="/integrations/executions/{{ execution.id }}" 
+                                       class="btn btn-outline-primary" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% if execution.status == 'running' %}
+                                    <button class="btn btn-outline-warning" 
+                                            onclick="cancelExecution({{ execution.id }})" 
+                                            title="Cancel Execution">
+                                        <i class="bi bi-stop"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if executions.pages > 1 %}
+            <nav aria-label="Execution pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if executions.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('integrations.list_executions', page=executions.prev_num, **request.args) }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in executions.iter_pages() %}
+                        {% if page_num %}
+                            {% if page_num != executions.page %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('integrations.list_executions', page=page_num, **request.args) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">…</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if executions.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('integrations.list_executions', page=executions.next_num, **request.args) }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            
+            {% else %}
+            <div class="text-center py-5">
+                <div class="bg-muted bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                     style="width: 64px; height: 64px;">
+                    <i class="bi bi-arrow-repeat fs-2 text-muted"></i>
+                </div>
+                <h6 class="text-muted">No executions found</h6>
+                <p class="text-muted mb-3">No integration executions match your current filters</p>
+                {% if integration_filter or status_filter or date_filter %}
+                <a href="/integrations/executions" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle me-2"></i>Clear Filters
+                </a>
+                {% else %}
+                <a href="/integrations/" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>View Integrations
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleFilters() {
+        const panel = document.getElementById('filtersPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function refreshExecutions() {
+        window.location.reload();
+    }
+
+    function cancelExecution(executionId) {
+        if (!confirm('Cancel this execution? This action cannot be undone.')) {
+            return;
+        }
+
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+
+        fetch(`/integrations/executions/${executionId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', 'Execution cancelled successfully');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showAlert('danger', data.message);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Failed to cancel execution: ' + error.message);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
+    }
+
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.content-area').prepend(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 5000);
+    }
+
+    // Auto-refresh running executions every 30 seconds
+    function autoRefreshRunning() {
+        const runningExecutions = document.querySelectorAll('tbody tr .badge.bg-info').length;
+        if (runningExecutions > 0) {
+            setTimeout(() => {
+                window.location.reload();
+            }, 30000);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', autoRefreshRunning);
+</script>
+{% endblock %}

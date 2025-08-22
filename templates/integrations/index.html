@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block page_title %}Integrations{% endblock %}
+{% block page_subtitle %}Manage ETL processes and data integrations{% endblock %}
+
+{% block content %}
+<!-- Action Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1 fw-semibold">Integration Management</h5>
+                    <p class="text-muted mb-0 small">Create and manage Extract-Transform-Load (ETL) processes</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleFilters()">
+                        <i class="bi bi-funnel me-1"></i>Filters
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshIntegrations()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                    <a href="{{ url_for('integrations.new_integration') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>Create Integration
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-diagram-3 text-primary fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ total_integrations }}</h4>
+                    <p class="text-muted mb-0 small">Total Integrations</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-check-circle text-success fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ active_integrations }}</h4>
+                    <p class="text-muted mb-0 small">Active Integrations</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-arrow-repeat text-info fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ recent_executions }}</h4>
+                    <p class="text-muted mb-0 small">Recent Executions</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-warning bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-database text-warning fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ datasources|length }}</h4>
+                    <p class="text-muted mb-0 small">Data Sources</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Panel -->
+<div class="row mb-4" id="filtersPanel" style="display: none;">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-funnel text-info"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">Filter Integrations</h6>
+            </div>
+            
+            <form id="filterForm" method="GET" class="row g-3">
+                <!-- Search -->
+                <div class="col-md-4">
+                    <label for="search" class="form-label small fw-medium">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               value="{{ search }}" placeholder="Integration name...">
+                    </div>
+                </div>
+                
+                <!-- Status Filter -->
+                <div class="col-md-2">
+                    <label for="status" class="form-label small fw-medium">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">All Status</option>
+                        <option value="completed" {{ 'selected' if status_filter == 'completed' else '' }}>Successful</option>
+                        <option value="failed" {{ 'selected' if status_filter == 'failed' else '' }}>Failed</option>
+                        <option value="running" {{ 'selected' if status_filter == 'running' else '' }}>Running</option>
+                        <option value="never_run" {{ 'selected' if status_filter == 'never_run' else '' }}>Never Run</option>
+                    </select>
+                </div>
+                
+                <!-- Source Filter -->
+                <div class="col-md-3">
+                    <label for="source" class="form-label small fw-medium">Source Database</label>
+                    <select class="form-select" id="source" name="source">
+                        <option value="">All Sources</option>
+                        {% for ds in datasources %}
+                        <option value="{{ ds.id }}" {{ 'selected' if source_filter == ds.id|string else '' }}>
+                            {{ ds.name }} ({{ ds.db_type|upper }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Sort -->
+                <div class="col-md-3">
+                    <label for="sort" class="form-label small fw-medium">Sort By</label>
+                    <select class="form-select" id="sort" name="sort">
+                        <option value="updated" {{ 'selected' if sort_by == 'updated' else '' }}>Last Updated</option>
+                        <option value="name" {{ 'selected' if sort_by == 'name' else '' }}>Name</option>
+                        <option value="created" {{ 'selected' if sort_by == 'created' else '' }}>Created Date</option>
+                    </select>
+                </div>
+                
+                <!-- Actions -->
+                <div class="col-12">
+                    <div class="d-flex gap-2 pt-2">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search me-1"></i>Apply Filters
+                        </button>
+                        <a href="{{ url_for('integrations.list_integrations') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-x-circle me-1"></i>Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Integrations List -->
+<div class="row">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-diagram-3 me-2"></i>Integration Jobs
+                </h6>
+                <span class="badge bg-secondary">{{ integrations|length }} total</span>
+            </div>
+            
+            {% if integrations %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Integration</th>
+                            <th>ETL Type</th>
+                            <th>Source → Target</th>
+                            <th>Last Execution</th>
+                            <th>Success Rate</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for integration in integrations %}
+                        <tr>
+                            <td>
+                                <div>
+                                    <h6 class="mb-1 fw-semibold">
+                                        <a href="{{ url_for('integrations.view_integration', integration_id=integration.id) }}" 
+                                           class="text-decoration-none">{{ integration.name }}</a>
+                                    </h6>
+                                    {% if integration.description %}
+                                    <p class="text-muted mb-0 small">{{ integration.description[:50] }}{% if integration.description|length > 50 %}...{% endif %}</p>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-info bg-opacity-20 text-info">
+                                    {{ integration.etl_type }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="small">
+                                    <div class="text-muted">
+                                        <i class="bi bi-database me-1"></i>{{ integration.source_datasource.name }}
+                                        <span class="text-primary mx-1">→</span>
+                                        <i class="bi bi-database me-1"></i>{{ integration.target_datasource.name }}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% set last_exec = integration.last_execution %}
+                                {% if last_exec %}
+                                <div class="small">
+                                    <div>{{ last_exec.started_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                                    <div class="text-muted">{{ last_exec.formatted_duration }}</div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">Never executed</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress me-2" style="width: 60px; height: 6px;">
+                                        <div class="progress-bar {% if integration.success_rate >= 80 %}bg-success{% elif integration.success_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                             role="progressbar" style="width: {{ integration.success_rate }}%"></div>
+                                    </div>
+                                    <span class="small">{{ integration.success_rate }}%</span>
+                                </div>
+                            </td>
+                            <td>
+                                {% set status = integration.status_summary %}
+                                <span class="badge bg-{{ status.color }} bg-opacity-20 text-{{ status.color }}">
+                                    {{ status.message }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-success btn-sm" 
+                                            onclick="executeIntegration({{ integration.id }}, '{{ integration.name }}')"
+                                            title="Execute Integration">
+                                        <i class="bi bi-play-fill"></i>
+                                    </button>
+                                    <a href="{{ url_for('integrations.view_integration', integration_id=integration.id) }}" 
+                                       class="btn btn-outline-primary btn-sm" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('integrations.edit_integration', integration_id=integration.id) }}" 
+                                       class="btn btn-outline-secondary btn-sm" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button class="btn btn-outline-danger btn-sm" 
+                                            onclick="deleteIntegration({{ integration.id }}, '{{ integration.name }}')"
+                                            title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="bg-muted bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                     style="width: 64px; height: 64px;">
+                    <i class="bi bi-diagram-3 fs-2 text-muted"></i>
+                </div>
+                <h6 class="text-muted">No integrations found</h6>
+                <p class="text-muted mb-3">Start by creating your first ETL integration</p>
+                <a href="{{ url_for('integrations.new_integration') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Create Integration
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleFilters() {
+        const panel = document.getElementById('filtersPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function refreshIntegrations() {
+        window.location.reload();
+    }
+
+    function executeIntegration(integrationId, integrationName) {
+        if (!confirm(`Execute integration "${integrationName}"?`)) {
+            return;
+        }
+
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting...';
+        btn.disabled = true;
+
+        fetch(`/integrations/${integrationId}/execute`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', data.message);
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                showAlert('danger', data.message);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        })
+        .catch(error => {
+            showAlert('danger', 'Failed to execute integration: ' + error.message);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
+    }
+
+    function deleteIntegration(integrationId, integrationName) {
+        if (!confirm(`Delete integration "${integrationName}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/integrations/${integrationId}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.content-area').prepend(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 5000);
+    }
+</script>
+{% endblock %}

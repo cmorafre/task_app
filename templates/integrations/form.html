@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ 'Edit Integration' if is_edit else 'Create Integration' }}{% endblock %}
+{% block page_subtitle %}{{ 'Update integration settings' if is_edit else 'Set up a new ETL integration process' }}{% endblock %}
+
+{% block content %}
+<!-- Navigation Breadcrumb -->
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('integrations.list_integrations') }}" class="text-decoration-none">
+                        <i class="bi bi-diagram-3 me-1"></i>Integrations
+                    </a>
+                </li>
+                <li class="breadcrumb-item active">{{ 'Edit' if is_edit else 'Create' }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Form Card -->
+<div class="row">
+    <div class="col-12">
+        <form method="POST" action="{{ url_for('integrations.update_integration', integration_id=integration.id) if is_edit else url_for('integrations.create_integration') }}">
+            <div class="modern-card">
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    <div>
+                        <h5 class="mb-1 fw-semibold">
+                            <i class="bi bi-diagram-3 me-2"></i>{{ 'Edit Integration' if is_edit else 'Create New Integration' }}
+                        </h5>
+                        <p class="text-muted mb-0 small">{{ 'Modify integration settings and ETL configuration' if is_edit else 'Configure Extract-Transform-Load process between databases' }}</p>
+                    </div>
+                    {% if is_edit %}
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-success btn-sm" 
+                                onclick="executeIntegration({{ integration.id }}, '{{ integration.name }}')"
+                                title="Test Integration">
+                            <i class="bi bi-play-fill me-1"></i>Test Run
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Basic Information -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="fw-semibold mb-3">
+                            <i class="bi bi-info-circle me-2"></i>Basic Information
+                        </h6>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="name" class="form-label">Integration Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ integration.name if integration else '' }}" 
+                               placeholder="e.g., Sales Data ETL" required>
+                        <div class="form-text">Choose a descriptive name for this integration</div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="3" placeholder="Describe what this integration does...">{{ integration.description if integration else '' }}</textarea>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Data Sources Configuration -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="fw-semibold mb-3">
+                            <i class="bi bi-database me-2"></i>Data Sources Configuration
+                        </h6>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="source_id" class="form-label">Source Database <span class="text-danger">*</span></label>
+                        <select class="form-select" id="source_id" name="source_id" required>
+                            <option value="">Select source database...</option>
+                            {% for ds in datasources %}
+                            <option value="{{ ds.id }}" 
+                                    {% if integration and integration.source_id == ds.id %}selected{% endif %}>
+                                {{ ds.name }} ({{ ds.db_type|upper }}) - {{ ds.display_connection }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Database to extract data from</div>
+                        
+                        {% if not datasources %}
+                        <div class="alert alert-warning mt-2">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            No data sources available. <a href="{{ url_for('datasources.new_datasource') }}">Create one first</a>.
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="target_id" class="form-label">Target Database <span class="text-danger">*</span></label>
+                        <select class="form-select" id="target_id" name="target_id" required>
+                            <option value="">Select target database...</option>
+                            {% for ds in datasources %}
+                            <option value="{{ ds.id }}" 
+                                    {% if integration and integration.target_id == ds.id %}selected{% endif %}>
+                                {{ ds.name }} ({{ ds.db_type|upper }}) - {{ ds.display_connection }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Database to load data into</div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- ETL Configuration -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="fw-semibold mb-3">
+                            <i class="bi bi-arrow-repeat me-2"></i>ETL Configuration
+                        </h6>
+                    </div>
+                    
+                    <!-- Extract SQL -->
+                    <div class="col-12 mb-4">
+                        <label for="extract_sql" class="form-label">Extract SQL Query <span class="text-danger">*</span></label>
+                        <textarea class="form-control font-monospace" id="extract_sql" name="extract_sql" 
+                                  rows="6" placeholder="SELECT * FROM source_table WHERE ..." required>{{ integration.extract_sql if integration else '' }}</textarea>
+                        <div class="form-text">
+                            <i class="bi bi-info-circle me-1"></i>
+                            SQL query to extract data from source database. Only SELECT statements are allowed.
+                        </div>
+                    </div>
+                    
+                    <!-- Python Transformation (Optional) -->
+                    <div class="col-12 mb-4">
+                        <label for="python_script_id" class="form-label">Python Transformation Script</label>
+                        <select class="form-select" id="python_script_id" name="python_script_id">
+                            <option value="">No transformation (direct load)</option>
+                            {% for script in python_scripts %}
+                            <option value="{{ script.id }}" 
+                                    {% if integration and integration.python_script_id == script.id %}selected{% endif %}>
+                                {{ script.name }} - {{ script.description[:50] if script.description else 'No description' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Optional Python script to transform data between extract and load phases.
+                            {% if not python_scripts %}
+                            <a href="{{ url_for('scripts.upload_script') }}">Upload Python scripts</a> to enable transformation.
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Load SQL -->
+                    <div class="col-12 mb-4">
+                        <label for="load_sql" class="form-label">Load SQL Query <span class="text-danger">*</span></label>
+                        <textarea class="form-control font-monospace" id="load_sql" name="load_sql" 
+                                  rows="6" placeholder="INSERT INTO target_table (column1, column2) VALUES (:field1, :field2)" required>{{ integration.load_sql if integration else '' }}</textarea>
+                        <div class="form-text">
+                            <i class="bi bi-info-circle me-1"></i>
+                            SQL query to load data into target database. Use named parameters (:field_name) to reference extracted data fields.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('integrations.list_integrations') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Cancel
+                    </a>
+                    <div class="d-flex gap-2">
+                        {% if is_edit %}
+                        <button type="button" class="btn btn-outline-primary" onclick="validateConfiguration()">
+                            <i class="bi bi-check-circle me-2"></i>Validate Config
+                        </button>
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-2"></i>{{ 'Update Integration' if is_edit else 'Create Integration' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Help Panel -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-question-circle text-info"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">ETL Configuration Help</h6>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <h6 class="fw-semibold text-primary">Extract Phase</h6>
+                    <ul class="small text-muted">
+                        <li>Use SELECT statements only</li>
+                        <li>Query executes on source database</li>
+                        <li>Results become input for transform phase</li>
+                        <li>Avoid operations that modify data</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h6 class="fw-semibold text-warning">Transform Phase</h6>
+                    <ul class="small text-muted">
+                        <li>Optional Python script processing</li>
+                        <li>Data available via environment variables</li>
+                        <li>Input: SCRIPTFLOW_INPUT_FILE (JSON)</li>
+                        <li>Output: SCRIPTFLOW_OUTPUT_FILE (JSON)</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h6 class="fw-semibold text-success">Load Phase</h6>
+                    <ul class="small text-muted">
+                        <li>Use INSERT/UPDATE/MERGE statements</li>
+                        <li>Reference data fields with :field_name</li>
+                        <li>Executes on target database</li>
+                        <li>Processes data in batches</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Validate that source and target are different
+    document.getElementById('source_id').addEventListener('change', validateDataSources);
+    document.getElementById('target_id').addEventListener('change', validateDataSources);
+
+    function validateDataSources() {
+        const sourceId = document.getElementById('source_id').value;
+        const targetId = document.getElementById('target_id').value;
+        
+        if (sourceId && targetId && sourceId === targetId) {
+            showAlert('warning', 'Source and target databases must be different');
+            document.getElementById('target_id').value = '';
+        }
+    }
+
+    function validateConfiguration() {
+        const extractSql = document.getElementById('extract_sql').value.trim();
+        const loadSql = document.getElementById('load_sql').value.trim();
+        
+        let errors = [];
+        
+        // Basic SQL validation
+        if (!extractSql.toLowerCase().startsWith('select')) {
+            errors.push('Extract SQL must start with SELECT');
+        }
+        
+        if (!loadSql.toLowerCase().match(/^(insert|update|merge)/)) {
+            errors.push('Load SQL must start with INSERT, UPDATE, or MERGE');
+        }
+        
+        // Check for dangerous operations in extract
+        const dangerousOps = ['drop', 'delete', 'update', 'insert', 'create', 'alter', 'truncate'];
+        const extractLower = extractSql.toLowerCase();
+        for (const op of dangerousOps) {
+            if (extractLower.includes(op)) {
+                errors.push(`Extract SQL cannot contain ${op.toUpperCase()} operations`);
+                break;
+            }
+        }
+        
+        if (errors.length > 0) {
+            showAlert('danger', 'Validation errors:<br>' + errors.map(e => '• ' + e).join('<br>'));
+        } else {
+            showAlert('success', 'Configuration validation passed!');
+        }
+    }
+
+    function executeIntegration(integrationId, integrationName) {
+        if (!confirm(`Execute integration "${integrationName}" for testing?`)) {
+            return;
+        }
+
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Running...';
+        btn.disabled = true;
+
+        fetch(`/integrations/${integrationId}/execute`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', data.message);
+            } else {
+                showAlert('danger', data.message);
+            }
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        })
+        .catch(error => {
+            showAlert('danger', 'Failed to execute integration: ' + error.message);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
+    }
+
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.content-area').prepend(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 5000);
+    }
+</script>
+{% endblock %}

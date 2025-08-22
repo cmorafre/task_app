@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ 'Edit Data Source' if is_edit else 'Add Data Source' }}{% endblock %}
+{% block page_subtitle %}{{ 'Update database connection settings' if is_edit else 'Configure new database connection' }}{% endblock %}
+
+{% block content %}
+<!-- Navigation Breadcrumb -->
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('integrations.list_integrations') }}" class="text-decoration-none">
+                        <i class="bi bi-diagram-3 me-1"></i>Integrations
+                    </a>
+                </li>
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('datasources.list_datasources') }}" class="text-decoration-none">
+                        <i class="bi bi-database me-1"></i>Data Sources
+                    </a>
+                </li>
+                <li class="breadcrumb-item active">{{ 'Edit' if is_edit else 'Add' }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Form Card -->
+<div class="row">
+    <div class="col-lg-8">
+        <form method="POST" action="{{ url_for('datasources.update_datasource', datasource_id=datasource.id) if is_edit else url_for('datasources.create_datasource') }}">
+            <div class="modern-card">
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    <div>
+                        <h5 class="mb-1 fw-semibold">
+                            <i class="bi bi-database me-2"></i>{{ 'Edit Data Source' if is_edit else 'Add New Data Source' }}
+                        </h5>
+                        <p class="text-muted mb-0 small">{{ 'Modify database connection settings' if is_edit else 'Configure connection to Oracle or PostgreSQL database' }}</p>
+                    </div>
+                    {% if is_edit %}
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-success btn-sm" 
+                                onclick="testExistingConnection()"
+                                title="Test Current Settings">
+                            <i class="bi bi-wifi me-1"></i>Test Connection
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Basic Information -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="fw-semibold mb-3">
+                            <i class="bi bi-info-circle me-2"></i>Basic Information
+                        </h6>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="name" class="form-label">Data Source Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ datasource.name if datasource else '' }}" 
+                               placeholder="e.g., Production Oracle DB" required>
+                        <div class="form-text">Choose a descriptive name for this connection</div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="db_type" class="form-label">Database Type <span class="text-danger">*</span></label>
+                        <select class="form-select" id="db_type" name="db_type" required {{ 'disabled' if is_edit else '' }}>
+                            <option value="">Select database type...</option>
+                            <option value="oracle" {% if datasource and datasource.db_type == 'oracle' %}selected{% endif %}>
+                                Oracle Database
+                            </option>
+                            <option value="postgres" {% if datasource and datasource.db_type == 'postgres' %}selected{% endif %}>
+                                PostgreSQL
+                            </option>
+                        </select>
+                        {% if is_edit %}
+                        <div class="form-text text-muted">Database type cannot be changed after creation</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-12 mt-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="2" placeholder="Optional description of this data source...">{{ datasource.description if datasource else '' }}</textarea>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Connection Settings -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="fw-semibold mb-3">
+                            <i class="bi bi-server me-2"></i>Connection Settings
+                        </h6>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <label for="host" class="form-label">Host <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="host" name="host" 
+                               value="{{ datasource.host if datasource else '' }}" 
+                               placeholder="e.g., localhost, db.company.com, 192.168.1.100" required>
+                        <div class="form-text">Server hostname or IP address</div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label for="port" class="form-label">Port <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="port" name="port" 
+                               value="{{ datasource.port if datasource else '' }}" 
+                               placeholder="1521" min="1" max="65535" required>
+                        <div class="form-text">Database port number</div>
+                    </div>
+                    
+                    <div class="col-md-6 mt-3">
+                        <label for="database" class="form-label">Database <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="database" name="database" 
+                               value="{{ datasource.database if datasource else '' }}" 
+                               placeholder="e.g., ORCL, myapp_db" required>
+                        <div class="form-text" id="databaseHelp">
+                            Oracle: SID or Service Name | PostgreSQL: Database name
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mt-3">
+                        <label for="username" class="form-label">Username <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="username" name="username" 
+                               value="{{ datasource.username if datasource else '' }}" 
+                               placeholder="database_user" required>
+                        <div class="form-text">Database user account</div>
+                    </div>
+                    
+                    <div class="col-12 mt-3">
+                        <label for="password" class="form-label">Password <span class="text-danger">{{ '*' if not is_edit else '' }}</span></label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password" name="password" 
+                                   placeholder="{{ 'Enter new password to change' if is_edit else 'Database password' }}" 
+                                   {{ 'required' if not is_edit else '' }}>
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword()">
+                                <i class="bi bi-eye" id="passwordIcon"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            {{ 'Leave blank to keep current password' if is_edit else 'Password will be encrypted and stored securely' }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Test Connection -->
+                <div class="row mb-4" id="testConnectionSection">
+                    <div class="col-12">
+                        <div class="bg-light bg-opacity-50 rounded p-3">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <h6 class="fw-semibold mb-1">
+                                        <i class="bi bi-wifi me-2"></i>Test Connection
+                                    </h6>
+                                    <p class="text-muted mb-0 small">Verify database connectivity before saving</p>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary" onclick="testConnection()">
+                                    <i class="bi bi-wifi me-2"></i>Test Connection
+                                </button>
+                            </div>
+                            <div id="testResult" class="mt-3" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('datasources.list_datasources') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Cancel
+                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-success" onclick="testConnection()">
+                            <i class="bi bi-wifi me-2"></i>Test & Validate
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-check-lg me-2"></i>{{ 'Update Data Source' if is_edit else 'Create Data Source' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Help Panel -->
+    <div class="col-lg-4">
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-question-circle text-info"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">Connection Help</h6>
+            </div>
+            
+            <div id="helpContent">
+                <div id="oracleHelp" style="display: none;">
+                    <h6 class="fw-semibold text-warning">Oracle Database</h6>
+                    <ul class="small text-muted">
+                        <li><strong>Default Port:</strong> 1521</li>
+                        <li><strong>Database:</strong> Enter SID or Service Name</li>
+                        <li><strong>Example:</strong> ORCL, XEPDB1, myapp.world</li>
+                        <li><strong>Connection:</strong> oracle+cx_oracle://</li>
+                    </ul>
+                    
+                    <h6 class="fw-semibold text-warning mt-3">Common Ports</h6>
+                    <ul class="small text-muted">
+                        <li>Standard: 1521</li>
+                        <li>Express: 1521</li>
+                        <li>RAC: 1521-1524</li>
+                    </ul>
+                </div>
+                
+                <div id="postgresHelp" style="display: none;">
+                    <h6 class="fw-semibold text-info">PostgreSQL</h6>
+                    <ul class="small text-muted">
+                        <li><strong>Default Port:</strong> 5432</li>
+                        <li><strong>Database:</strong> Database name</li>
+                        <li><strong>Example:</strong> myapp, postgres, production</li>
+                        <li><strong>Connection:</strong> postgresql+psycopg2://</li>
+                    </ul>
+                    
+                    <h6 class="fw-semibold text-info mt-3">Common Ports</h6>
+                    <ul class="small text-muted">
+                        <li>Standard: 5432</li>
+                        <li>Alternative: 5433, 5434</li>
+                        <li>Cloud: varies by provider</li>
+                    </ul>
+                </div>
+                
+                <div id="generalHelp">
+                    <h6 class="fw-semibold text-secondary">General Tips</h6>
+                    <ul class="small text-muted">
+                        <li>Test connection before saving</li>
+                        <li>Use read-only users when possible</li>
+                        <li>Ensure firewall allows connections</li>
+                        <li>Passwords are encrypted at rest</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Connection String Preview -->
+        <div class="modern-card mt-3">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-code me-2"></i>Connection Preview
+            </h6>
+            <div class="bg-dark rounded p-3">
+                <code class="text-light small" id="connectionPreview">
+                    Select database type to see connection string
+                </code>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Database type change handler
+    document.getElementById('db_type').addEventListener('change', function() {
+        const dbType = this.value;
+        updateHelp(dbType);
+        updateConnectionPreview();
+        updateDefaultPort(dbType);
+    });
+
+    // Input change handlers for connection preview
+    ['host', 'port', 'database', 'username'].forEach(field => {
+        document.getElementById(field).addEventListener('input', updateConnectionPreview);
+    });
+
+    function updateHelp(dbType) {
+        document.getElementById('oracleHelp').style.display = dbType === 'oracle' ? 'block' : 'none';
+        document.getElementById('postgresHelp').style.display = dbType === 'postgres' ? 'block' : 'none';
+        
+        // Update database field help text
+        const helpText = document.getElementById('databaseHelp');
+        if (dbType === 'oracle') {
+            helpText.textContent = 'Oracle: SID or Service Name (e.g., ORCL, XEPDB1)';
+        } else if (dbType === 'postgres') {
+            helpText.textContent = 'PostgreSQL: Database name (e.g., myapp, postgres)';
+        } else {
+            helpText.textContent = 'Oracle: SID or Service Name | PostgreSQL: Database name';
+        }
+    }
+
+    function updateDefaultPort(dbType) {
+        const portField = document.getElementById('port');
+        if (!portField.value || portField.value === '1521' || portField.value === '5432') {
+            if (dbType === 'oracle') {
+                portField.value = '1521';
+            } else if (dbType === 'postgres') {
+                portField.value = '5432';
+            }
+        }
+    }
+
+    function updateConnectionPreview() {
+        const dbType = document.getElementById('db_type').value;
+        const host = document.getElementById('host').value || 'hostname';
+        const port = document.getElementById('port').value || 'port';
+        const database = document.getElementById('database').value || 'database';
+        const username = document.getElementById('username').value || 'username';
+        
+        let connectionString = '';
+        
+        if (dbType === 'oracle') {
+            connectionString = `oracle+cx_oracle://${username}:password@${host}:${port}/${database}`;
+        } else if (dbType === 'postgres') {
+            connectionString = `postgresql+psycopg2://${username}:password@${host}:${port}/${database}`;
+        } else {
+            connectionString = 'Select database type to see connection string';
+        }
+        
+        document.getElementById('connectionPreview').textContent = connectionString;
+    }
+
+    function togglePassword() {
+        const passwordField = document.getElementById('password');
+        const passwordIcon = document.getElementById('passwordIcon');
+        
+        if (passwordField.type === 'password') {
+            passwordField.type = 'text';
+            passwordIcon.className = 'bi bi-eye-slash';
+        } else {
+            passwordField.type = 'password';
+            passwordIcon.className = 'bi bi-eye';
+        }
+    }
+
+    function testConnection() {
+        const dbType = document.getElementById('db_type').value;
+        const host = document.getElementById('host').value;
+        const port = document.getElementById('port').value;
+        const database = document.getElementById('database').value;
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        if (!dbType || !host || !port || !database || !username || !password) {
+            showTestResult('warning', 'Please fill in all required fields before testing');
+            return;
+        }
+        
+        const testBtn = event.target;
+        const originalHtml = testBtn.innerHTML;
+        testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+        testBtn.disabled = true;
+        
+        showTestResult('info', 'Testing connection...');
+        
+        fetch('/integrations/sources/test-form', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                db_type: dbType,
+                host: host,
+                port: parseInt(port),
+                database: database,
+                username: username,
+                password: password
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showTestResult('success', '✅ Connection successful! Database is reachable.');
+            } else {
+                showTestResult('danger', `❌ Connection failed: ${data.message}`);
+            }
+            testBtn.innerHTML = originalHtml;
+            testBtn.disabled = false;
+        })
+        .catch(error => {
+            showTestResult('danger', `❌ Test failed: ${error.message}`);
+            testBtn.innerHTML = originalHtml;
+            testBtn.disabled = false;
+        });
+    }
+
+    function testExistingConnection() {
+        const datasourceId = {{ datasource.id if datasource else 'null' }};
+        
+        const testBtn = event.target;
+        const originalHtml = testBtn.innerHTML;
+        testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+        testBtn.disabled = true;
+        
+        fetch(`/integrations/sources/${datasourceId}/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', '✅ Connection successful!');
+            } else {
+                showAlert('danger', `❌ Connection failed: ${data.message}`);
+            }
+            testBtn.innerHTML = originalHtml;
+            testBtn.disabled = false;
+        })
+        .catch(error => {
+            showAlert('danger', `❌ Test failed: ${error.message}`);
+            testBtn.innerHTML = originalHtml;
+            testBtn.disabled = false;
+        });
+    }
+
+    function showTestResult(type, message) {
+        const resultDiv = document.getElementById('testResult');
+        resultDiv.className = `alert alert-${type} mb-0`;
+        resultDiv.innerHTML = message;
+        resultDiv.style.display = 'block';
+    }
+
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.content-area').prepend(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 5000);
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const dbType = document.getElementById('db_type').value;
+        if (dbType) {
+            updateHelp(dbType);
+            updateConnectionPreview();
+        }
+    });
+</script>
+{% endblock %}

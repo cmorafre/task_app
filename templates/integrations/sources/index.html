@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block page_title %}Data Sources{% endblock %}
+{% block page_subtitle %}Manage database connections for integrations{% endblock %}
+
+{% block content %}
+<!-- Action Bar -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1 fw-semibold">Data Source Management</h5>
+                    <p class="text-muted mb-0 small">Configure database connections for Oracle and PostgreSQL</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleFilters()">
+                        <i class="bi bi-funnel me-1"></i>Filters
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshDataSources()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                    <a href="{{ url_for('datasources.new_datasource') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>Add Data Source
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-database text-primary fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ total_datasources }}</h4>
+                    <p class="text-muted mb-0 small">Total Sources</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-warning bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-server text-warning fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ oracle_count }}</h4>
+                    <p class="text-muted mb-0 small">Oracle Databases</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-cloud text-info fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ postgres_count }}</h4>
+                    <p class="text-muted mb-0 small">PostgreSQL Databases</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="modern-card">
+            <div class="d-flex align-items-center">
+                <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-check-circle text-success fs-4"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ total_datasources }}</h4>
+                    <p class="text-muted mb-0 small">Active Sources</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Panel -->
+<div class="row mb-4" id="filtersPanel" style="display: none;">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-funnel text-info"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">Filter Data Sources</h6>
+            </div>
+            
+            <form id="filterForm" method="GET" class="row g-3">
+                <!-- Search -->
+                <div class="col-md-4">
+                    <label for="search" class="form-label small fw-medium">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               value="{{ search }}" placeholder="Data source name...">
+                    </div>
+                </div>
+                
+                <!-- Database Type -->
+                <div class="col-md-3">
+                    <label for="db_type" class="form-label small fw-medium">Database Type</label>
+                    <select class="form-select" id="db_type" name="db_type">
+                        <option value="">All Types</option>
+                        <option value="oracle" {{ 'selected' if db_type_filter == 'oracle' else '' }}>Oracle</option>
+                        <option value="postgres" {{ 'selected' if db_type_filter == 'postgres' else '' }}>PostgreSQL</option>
+                    </select>
+                </div>
+                
+                <!-- Sort -->
+                <div class="col-md-3">
+                    <label for="sort" class="form-label small fw-medium">Sort By</label>
+                    <select class="form-select" id="sort" name="sort">
+                        <option value="updated" {{ 'selected' if sort_by == 'updated' else '' }}>Last Updated</option>
+                        <option value="name" {{ 'selected' if sort_by == 'name' else '' }}>Name</option>
+                        <option value="created" {{ 'selected' if sort_by == 'created' else '' }}>Created Date</option>
+                        <option value="db_type" {{ 'selected' if sort_by == 'db_type' else '' }}>Database Type</option>
+                    </select>
+                </div>
+                
+                <!-- Actions -->
+                <div class="col-12">
+                    <div class="d-flex gap-2 pt-2">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search me-1"></i>Apply Filters
+                        </button>
+                        <a href="{{ url_for('datasources.list_datasources') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-x-circle me-1"></i>Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Data Sources List -->
+<div class="row">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="mb-0 fw-semibold">
+                    <i class="bi bi-database me-2"></i>Database Connections
+                </h6>
+                <span class="badge bg-secondary">{{ datasources|length }} total</span>
+            </div>
+            
+            {% if datasources %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data Source</th>
+                            <th>Database Type</th>
+                            <th>Connection Details</th>
+                            <th>Status</th>
+                            <th>Usage</th>
+                            <th>Last Updated</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ds in datasources %}
+                        <tr>
+                            <td>
+                                <div>
+                                    <h6 class="mb-1 fw-semibold">
+                                        <a href="{{ url_for('datasources.view_datasource', datasource_id=ds.id) }}" 
+                                           class="text-decoration-none">{{ ds.name }}</a>
+                                    </h6>
+                                    {% if ds.description %}
+                                    <p class="text-muted mb-0 small">{{ ds.description[:50] }}{% if ds.description|length > 50 %}...{% endif %}</p>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'warning' if ds.db_type == 'oracle' else 'info' }} bg-opacity-20 text-{{ 'warning' if ds.db_type == 'oracle' else 'info' }}">
+                                    <i class="bi bi-{{ 'server' if ds.db_type == 'oracle' else 'cloud' }} me-1"></i>
+                                    {{ ds.db_type|upper }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="small">
+                                    <div><strong>{{ ds.host }}:{{ ds.port }}</strong></div>
+                                    <div class="text-muted">{{ ds.database }} ({{ ds.username }})</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="connection-status" data-datasource-id="{{ ds.id }}" data-loading="true">
+                                        <span class="spinner-border spinner-border-sm text-muted me-1"></span>
+                                        <span class="text-muted small">Testing...</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% set as_source = ds.integrations_as_source|length %}
+                                {% set as_target = ds.integrations_as_target|length %}
+                                {% set total_usage = as_source + as_target %}
+                                <div class="small">
+                                    {% if total_usage > 0 %}
+                                    <span class="badge bg-primary bg-opacity-20 text-primary">{{ total_usage }} integration(s)</span>
+                                    {% else %}
+                                    <span class="text-muted">Not used</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="small">
+                                    <div>{{ ds.updated_at.strftime('%Y-%m-%d') }}</div>
+                                    <div class="text-muted">{{ ds.updated_at.strftime('%H:%M') }}</div>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-success btn-sm" 
+                                            onclick="testConnection({{ ds.id }}, '{{ ds.name }}')"
+                                            title="Test Connection">
+                                        <i class="bi bi-wifi"></i>
+                                    </button>
+                                    <a href="{{ url_for('datasources.view_datasource', datasource_id=ds.id) }}" 
+                                       class="btn btn-outline-primary btn-sm" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('datasources.edit_datasource', datasource_id=ds.id) }}" 
+                                       class="btn btn-outline-secondary btn-sm" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button class="btn btn-outline-danger btn-sm" 
+                                            onclick="deleteDataSource({{ ds.id }}, '{{ ds.name }}', {{ total_usage }})"
+                                            title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="bg-muted bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                     style="width: 64px; height: 64px;">
+                    <i class="bi bi-database fs-2 text-muted"></i>
+                </div>
+                <h6 class="text-muted">No data sources found</h6>
+                <p class="text-muted mb-3">Add your first database connection to get started</p>
+                <a href="{{ url_for('datasources.new_datasource') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Add Data Source
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleFilters() {
+        const panel = document.getElementById('filtersPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function refreshDataSources() {
+        window.location.reload();
+    }
+
+    function testConnection(datasourceId, datasourceName) {
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+
+        fetch(`/integrations/sources/${datasourceId}/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', `Connection to "${datasourceName}" successful!`);
+            } else {
+                showAlert('danger', `Connection to "${datasourceName}" failed: ${data.message}`);
+            }
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        })
+        .catch(error => {
+            showAlert('danger', `Failed to test connection: ${error.message}`);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
+    }
+
+    function deleteDataSource(datasourceId, datasourceName, usageCount) {
+        if (usageCount > 0) {
+            showAlert('warning', `Cannot delete "${datasourceName}" - it is being used by ${usageCount} integration(s)`);
+            return;
+        }
+
+        if (!confirm(`Delete data source "${datasourceName}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/integrations/sources/${datasourceId}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function showAlert(type, message) {
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show`;
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.querySelector('.content-area').prepend(alert);
+        
+        setTimeout(() => {
+            alert.remove();
+        }, 5000);
+    }
+
+    // Auto-test connections on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.connection-status[data-loading="true"]').forEach(statusEl => {
+            const datasourceId = statusEl.getAttribute('data-datasource-id');
+            
+            fetch(`/integrations/sources/${datasourceId}/test`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    statusEl.innerHTML = `
+                        <i class="bi bi-check-circle text-success me-1"></i>
+                        <span class="text-success small">Connected</span>
+                    `;
+                } else {
+                    statusEl.innerHTML = `
+                        <i class="bi bi-x-circle text-danger me-1"></i>
+                        <span class="text-danger small">Connection Failed</span>
+                    `;
+                }
+            })
+            .catch(error => {
+                statusEl.innerHTML = `
+                    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                    <span class="text-warning small">Test Failed</span>
+                `;
+            });
+        });
+    });
+</script>
+{% endblock %}

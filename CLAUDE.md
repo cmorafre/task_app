@@ -114,3 +114,31 @@ All UI components follow consistent design patterns defined in `DESIGN_STANDARDS
 - No formal test framework configured
 - Manual testing workflow documented in PRD
 - Integration tests cover critical script execution flows
+
+## Integration Feature (NEW)
+
+### ETL Functionality
+- **Extract-Transform-Load**: Full ETL pipeline support
+- **Data Sources**: Oracle and PostgreSQL connections
+- **Python Transformation**: Optional data processing scripts
+- **Scheduling**: Automated ETL job execution
+
+### New Components
+- **DataSource Model**: Encrypted database connections
+- **Integration Model**: ETL job definitions
+- **IntegrationExecution Model**: ETL execution history
+- **ConnectionManager Service**: Database connection pooling
+- **ETLExecutor Service**: ETL orchestration engine
+
+### Integration Pages
+- `/integrations` - Main Integration dashboard
+- `/integrations/new` - Create new ETL job
+- `/integrations/{id}` - View Integration details
+- `/integrations/sources` - Manage database connections
+- `/integrations/executions` - ETL execution logs
+
+### Database Support
+- **Oracle**: cx_Oracle connector with connection pooling
+- **PostgreSQL**: psycopg2 connector with connection pooling
+- **Encryption**: Credentials encrypted using Fernet (cryptography)
+- **Security**: SQL validation, injection prevention, subprocess isolation

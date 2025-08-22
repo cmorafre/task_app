@@ -39,18 +39,28 @@ class Schedule(db.Model):
     notify_on_failure = db.Column(db.Boolean, default=True)
     notification_emails = db.Column(db.Text)  # JSON array of email addresses
     
-    # Foreign key
-    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)
+    # Foreign keys (EXTENDED for Integration feature - NON-BREAKING)
+    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=True)  # Made nullable for Integration jobs
+    integration_id = db.Column(db.Integer, db.ForeignKey('integrations.id'), nullable=True)  # NEW: Integration support
     
     # Relationships
     executions = db.relationship('Execution', backref='schedule', lazy=True)
     
-    def __init__(self, name, script_id, frequency, schedule_config=None, description=''):
+    def __init__(self, name, frequency, schedule_config=None, description='', script_id=None, integration_id=None):
+        """EXTENDED constructor for Integration support (BACKWARD COMPATIBLE)"""
         self.name = name
-        self.script_id = script_id
         self.frequency = frequency
         self.schedule_config = schedule_config
         self.description = description
+        
+        # Support both script and integration scheduling (NEW)
+        if script_id and integration_id:
+            raise ValueError("Cannot schedule both script and integration. Choose one.")
+        if not script_id and not integration_id:
+            raise ValueError("Must provide either script_id or integration_id")
+            
+        self.script_id = script_id
+        self.integration_id = integration_id
         self.next_execution = self.calculate_next_execution()
     
     @property
@@ -316,5 +326,160 @@ class Schedule(db.Model):
             self.next_execution = None
         db.session.commit()
     
+    # === NEW INTEGRATION FEATURE METHODS (NON-BREAKING ADDITIONS) ===
+    
+    @property
+    def is_script_schedule(self):
+        """Check if this schedule is for a script (NEW)"""
+        return self.script_id is not None
+    
+    @property
+    def is_integration_schedule(self):
+        """Check if this schedule is for an integration (NEW)"""
+        return self.integration_id is not None
+    
+    @property
+    def schedule_type(self):
+        """Get schedule type description (NEW)"""
+        if self.is_script_schedule:
+            return "Script"
+        elif self.is_integration_schedule:
+            return "Integration"
+        else:
+            return "Unknown"
+    
+    @property
+    def scheduled_item(self):
+        """Get the scheduled item (script or integration) (NEW)"""
+        if self.is_script_schedule:
+            try:
+                from app.models.script import Script
+                return Script.query.get(self.script_id)
+            except ImportError:
+                return None
+        elif self.is_integration_schedule:
+            try:
+                from app.models.integration import Integration
+                return Integration.query.get(self.integration_id)
+            except ImportError:
+                return None
+        return None
+    
+    @property
+    def scheduled_item_name(self):
+        """Get name of scheduled item (NEW)"""
+        item = self.scheduled_item
+        return item.name if item else "Unknown"
+    
+    @property
+    def scheduled_item_description(self):
+        """Get description of scheduled item (NEW)"""
+        item = self.scheduled_item
+        return item.description if item else ""
+    
+    def get_execution_history(self, limit=10):
+        """Get execution history for this schedule (NEW - supports both types)"""
+        if self.is_script_schedule:
+            from app.models.execution import Execution
+            return Execution.query.filter_by(schedule_id=self.id)\
+                                 .order_by(Execution.started_at.desc())\
+                                 .limit(limit).all()
+        elif self.is_integration_schedule:
+            from app.models.integration_execution import IntegrationExecution
+            return IntegrationExecution.query.filter_by(schedule_id=self.id)\
+                                            .order_by(IntegrationExecution.started_at.desc())\
+                                            .limit(limit).all()
+        return []
+    
+    @property
+    def last_execution_result(self):
+        """Get last execution result (NEW - supports both types)"""
+        history = self.get_execution_history(limit=1)
+        if not history:
+            return None
+        
+        last_exec = history[0]
+        return {
+            'id': last_exec.id,
+            'status': last_exec.status,
+            'started_at': last_exec.started_at,
+            'completed_at': last_exec.completed_at,
+            'duration': last_exec.formatted_duration,
+            'success': last_exec.is_completed if hasattr(last_exec, 'is_completed') else (last_exec.status == 'completed')
+        }
+    
+    @property
+    def execution_statistics(self):
+        """Get execution statistics (NEW - supports both types)"""
+        history = self.get_execution_history(limit=50)  # Last 50 executions
+        
+        if not history:
+            return {
+                'total': 0,
+                'successful': 0,
+                'failed': 0,
+                'success_rate': 0,
+                'avg_duration': 0
+            }
+        
+        total = len(history)
+        successful = 0
+        failed = 0
+        total_duration = 0
+        
+        for exec_item in history:
+            if hasattr(exec_item, 'is_completed'):
+                if exec_item.is_completed:
+                    successful += 1
+                elif exec_item.is_failed:
+                    failed += 1
+            else:
+                # Fallback for script executions
+                if exec_item.status == 'completed':
+                    successful += 1
+                else:
+                    failed += 1
+            
+            if exec_item.duration_seconds:
+                total_duration += exec_item.duration_seconds
+        
+        success_rate = round((successful / total) * 100, 1) if total > 0 else 0
+        avg_duration = round(total_duration / total, 2) if total > 0 else 0
+        
+        return {
+            'total': total,
+            'successful': successful,
+            'failed': failed,
+            'success_rate': success_rate,
+            'avg_duration': avg_duration
+        }
+    
+    def validate_for_integration(self):
+        """Validate schedule configuration for integration use (NEW)"""
+        errors = []
+        
+        if not self.is_integration_schedule:
+            errors.append("This schedule is not configured for integrations")
+            return errors
+        
+        item = self.scheduled_item
+        if not item:
+            errors.append("Integration not found")
+            return errors
+        
+        if not item.is_active:
+            errors.append("Integration is not active")
+        
+        # Validate data sources
+        if not hasattr(item, 'source_datasource') or not item.source_datasource:
+            errors.append("Integration source database not configured")
+        
+        if not hasattr(item, 'target_datasource') or not item.target_datasource:
+            errors.append("Integration target database not configured")
+        
+        return errors
+    
+    # === END NEW INTEGRATION METHODS ===
+    
     def __repr__(self):
-        return f'<Schedule {self.name} - {self.frequency.value}>'
+        return f'<Schedule {self.name} - {self.frequency.value} ({self.schedule_type})>'

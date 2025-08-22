@@ -37,6 +37,12 @@ app.config['PYTHON_ENV'] = os.environ.get('PYTHON_ENV', None)
 
 # Initialize extensions
 db = SQLAlchemy(app)
+
+# Set db for models package (CRITICAL: must be done before importing models)
+# Note: models are now defined directly in this file, so this is not needed
+# import app.models
+# app.models.db = db
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
@@ -387,6 +393,280 @@ class Schedule(db.Model):
         self.next_run_time = next_run
         return next_run
 
+# === NEW INTEGRATION FEATURE MODELS (NON-BREAKING ADDITION) ===
+
+class DataSource(db.Model):
+    """DataSource model for managing database connections in Integration feature"""
+    
+    __tablename__ = 'datasources'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    db_type = db.Column(db.String(20), nullable=False)  # 'oracle' or 'postgres'
+    host = db.Column(db.String(255), nullable=False)
+    port = db.Column(db.Integer, nullable=False)
+    database = db.Column(db.String(100), nullable=False)
+    username = db.Column(db.String(100), nullable=False)
+    encrypted_password = db.Column(db.Text, nullable=False)  # Encrypted password
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    def set_password(self, password):
+        """Encrypt and store password"""
+        from cryptography.fernet import Fernet
+        encryption_key = self._get_encryption_key()
+        f = Fernet(encryption_key)
+        self.encrypted_password = f.encrypt(password.encode()).decode()
+    
+    def get_password(self):
+        """Decrypt and return password"""
+        from cryptography.fernet import Fernet
+        encryption_key = self._get_encryption_key()
+        f = Fernet(encryption_key)
+        return f.decrypt(self.encrypted_password.encode()).decode()
+    
+    def _get_encryption_key(self):
+        """Get or create encryption key"""
+        key = Settings.get_value('datasource_encryption_key')
+        if not key:
+            from cryptography.fernet import Fernet
+            key = Fernet.generate_key().decode()
+            Settings.set_value('datasource_encryption_key', key, 'Encryption key for datasource passwords')
+        return key.encode() if isinstance(key, str) else key
+    
+    @property
+    def connection_string(self):
+        """Generate connection string based on db_type"""
+        if self.db_type == 'oracle':
+            return f"oracle+cx_oracle://{self.username}:{self.get_password()}@{self.host}:{self.port}/{self.database}"
+        elif self.db_type == 'postgres':
+            return f"postgresql+psycopg2://{self.username}:{self.get_password()}@{self.host}:{self.port}/{self.database}"
+        else:
+            raise ValueError(f"Unsupported database type: {self.db_type}")
+    
+    @property
+    def display_connection(self):
+        """Safe connection string for display (without password)"""
+        return f"{self.db_type}://{self.username}@{self.host}:{self.port}/{self.database}"
+    
+    def test_connection(self):
+        """Test database connection"""
+        try:
+            from sqlalchemy import create_engine, text
+            engine = create_engine(self.connection_string, connect_args={'timeout': 10})
+            
+            with engine.connect() as conn:
+                if self.db_type == 'oracle':
+                    result = conn.execute(text("SELECT 1 FROM DUAL"))
+                else:  # postgres
+                    result = conn.execute(text("SELECT 1"))
+                
+                result.fetchone()
+                return True, "Connection successful"
+                
+        except Exception as e:
+            return False, str(e)
+
+class Integration(db.Model):
+    """Integration model for managing ETL jobs (Extract-Transform-Load)"""
+    
+    __tablename__ = 'integrations'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    extract_sql = db.Column(db.Text, nullable=False)  # SQL query for data extraction
+    load_sql = db.Column(db.Text, nullable=False)     # SQL query for data loading
+    python_script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=True)
+    source_id = db.Column(db.Integer, db.ForeignKey('datasources.id'), nullable=False)
+    target_id = db.Column(db.Integer, db.ForeignKey('datasources.id'), nullable=False)
+    config_json = db.Column(db.Text)  # Additional configuration as JSON
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Relationships
+    source_datasource = db.relationship('DataSource', foreign_keys=[source_id])
+    target_datasource = db.relationship('DataSource', foreign_keys=[target_id])
+    python_script = db.relationship('Script', backref='integrations_using_script')
+    
+    @property
+    def has_python_transformation(self):
+        """Check if integration has Python transformation script"""
+        return self.python_script_id is not None
+    
+    @property
+    def etl_type(self):
+        """Get ETL type description"""
+        if self.has_python_transformation:
+            return "Extract → Transform (Python) → Load"
+        else:
+            return "Extract → Load (Direct)"
+    
+    @property
+    def last_execution(self):
+        """Get the most recent execution"""
+        return IntegrationExecution.query.filter_by(integration_id=self.id)\
+                                        .order_by(IntegrationExecution.started_at.desc())\
+                                        .first()
+    
+    @property
+    def execution_count(self):
+        """Get total execution count"""
+        return IntegrationExecution.query.filter_by(integration_id=self.id).count()
+    
+    @property
+    def success_rate(self):
+        """Calculate success rate percentage"""
+        total = self.execution_count
+        if total == 0:
+            return 0
+        
+        successful = IntegrationExecution.query.filter_by(
+            integration_id=self.id,
+            status='completed'
+        ).count()
+        return round((successful / total) * 100, 1)
+    
+    @property
+    def status_summary(self):
+        """Get status summary for dashboard"""
+        last_exec = self.last_execution
+        
+        if not last_exec:
+            return {'status': 'never_run', 'message': 'Never executed', 'color': 'secondary'}
+        
+        status_map = {
+            'completed': {'message': 'Last run successful', 'color': 'success'},
+            'failed': {'message': 'Last run failed', 'color': 'danger'},
+            'running': {'message': 'Currently running', 'color': 'running'},
+            'timeout': {'message': 'Last run timed out', 'color': 'warning'},
+            'cancelled': {'message': 'Last run cancelled', 'color': 'warning'}
+        }
+        
+        status_info = status_map.get(last_exec.status, {'message': 'Unknown status', 'color': 'secondary'})
+        
+        return {
+            'status': last_exec.status,
+            'message': status_info['message'],
+            'color': status_info['color'],
+            'last_run': last_exec.started_at
+        }
+    
+    def validate_sql_queries(self):
+        """Validate SQL queries (basic validation)"""
+        errors = []
+        
+        # Basic validation for extract query (should be SELECT only)
+        extract_sql_clean = self.extract_sql.strip().upper()
+        if not extract_sql_clean.startswith('SELECT'):
+            errors.append("Extract SQL must be a SELECT query")
+        
+        # Check for dangerous operations in extract query
+        dangerous_keywords = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'CREATE', 'ALTER', 'TRUNCATE']
+        for keyword in dangerous_keywords:
+            if keyword in extract_sql_clean:
+                errors.append(f"Extract SQL cannot contain {keyword} operations")
+        
+        # Basic validation for load query
+        load_sql_clean = self.load_sql.strip().upper()
+        if not (load_sql_clean.startswith('INSERT') or load_sql_clean.startswith('UPDATE') or 
+                load_sql_clean.startswith('MERGE') or load_sql_clean.startswith('UPSERT')):
+            errors.append("Load SQL must be an INSERT, UPDATE, MERGE, or UPSERT query")
+        
+        return errors
+
+class IntegrationExecution(db.Model):
+    """IntegrationExecution model for tracking ETL job execution history"""
+    
+    __tablename__ = 'integration_executions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    completed_at = db.Column(db.DateTime)
+    duration_seconds = db.Column(db.Float)
+    status = db.Column(db.String(20), default='pending', nullable=False)  # pending, running, completed, failed, timeout, cancelled
+    exit_code = db.Column(db.Integer)
+    records_extracted = db.Column(db.Integer, default=0)
+    records_loaded = db.Column(db.Integer, default=0)
+    records_failed = db.Column(db.Integer, default=0)
+    extract_output = db.Column(db.Text)  # Output from extract phase
+    transform_output = db.Column(db.Text)  # Output from transform phase (Python script)
+    load_output = db.Column(db.Text)  # Output from load phase
+    error_message = db.Column(db.Text)  # Error details if failed
+    logs = db.Column(db.Text)  # Detailed execution logs
+    trigger_type = db.Column(db.String(20), default='manual', nullable=False)  # manual, scheduled, api
+    integration_id = db.Column(db.Integer, db.ForeignKey('integrations.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    schedule_id = db.Column(db.Integer, db.ForeignKey('schedules.id'), nullable=True)
+    
+    # Relationships
+    integration = db.relationship('Integration', backref='executions')
+    
+    @property
+    def is_running(self):
+        """Check if execution is currently running"""
+        return self.status == 'running'
+    
+    @property
+    def is_completed(self):
+        """Check if execution completed successfully"""
+        return self.status == 'completed'
+    
+    @property
+    def is_failed(self):
+        """Check if execution failed"""
+        return self.status in ['failed', 'timeout', 'cancelled']
+    
+    @property
+    def formatted_duration(self):
+        """Get human-readable duration"""
+        if not self.duration_seconds:
+            return "N/A"
+        
+        if self.duration_seconds < 60:
+            return f"{self.duration_seconds:.1f}s"
+        elif self.duration_seconds < 3600:
+            minutes = int(self.duration_seconds // 60)
+            seconds = int(self.duration_seconds % 60)
+            return f"{minutes}m {seconds}s"
+        else:
+            hours = int(self.duration_seconds // 3600)
+            minutes = int((self.duration_seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
+    
+    @property
+    def status_icon(self):
+        """Get status icon"""
+        icons = {
+            'pending': '⏳',
+            'running': '🔄',
+            'completed': '✅',
+            'failed': '❌',
+            'timeout': '⏰',
+            'cancelled': '🛑'
+        }
+        return icons.get(self.status, '❓')
+    
+    @property
+    def status_color(self):
+        """Get status color for UI"""
+        colors = {
+            'pending': 'secondary',
+            'running': 'running',
+            'completed': 'success',
+            'failed': 'danger',
+            'timeout': 'warning',
+            'cancelled': 'danger'
+        }
+        return colors.get(self.status, 'secondary')
+
+# === END NEW INTEGRATION MODELS ===
+
 # User loader
 @login_manager.user_loader
 def load_user(user_id):
@@ -678,6 +958,10 @@ def register_blueprints():
     from app.controllers.logs import init_logs_blueprint, init_api_blueprint
     from app.controllers.admin import init_admin_blueprint
     
+    # NEW: Integration feature blueprints (NON-BREAKING ADDITION)
+    from app.controllers.integrations import init_integrations_blueprint
+    from app.controllers.datasources import init_datasources_blueprint
+    
     # Initialize and register blueprints
     auth_bp = init_auth_blueprint(db, User)
     main_bp = init_main_blueprint(app, db, User, Script, Execution, Schedule, Settings, apply_user_data_filter)
@@ -689,6 +973,10 @@ def register_blueprints():
     api_bp = init_api_blueprint(db, Execution, apply_user_data_filter)
     admin_bp = init_admin_blueprint(db, User, Script, Execution, Schedule)
     
+    # NEW: Initialize Integration feature blueprints (NON-BREAKING ADDITION)
+    integrations_bp = init_integrations_blueprint(app, db, Integration, IntegrationExecution, DataSource, Script, Schedule, apply_user_data_filter)
+    datasources_bp = init_datasources_blueprint(app, db, DataSource, apply_user_data_filter)
+    
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -698,7 +986,11 @@ def register_blueprints():
     app.register_blueprint(api_bp)
     app.register_blueprint(admin_bp)
     
-    print("✅ All blueprints registered successfully")
+    # NEW: Register Integration feature blueprints (NON-BREAKING ADDITION)
+    app.register_blueprint(integrations_bp)
+    app.register_blueprint(datasources_bp)
+    
+    print("✅ All blueprints registered successfully (including Integration feature)")
 
 # Root route
 @app.route('/')
