@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}View Script - {{ script.name }}{% endblock %}
+
+{% block page_title %}{{ script.name }}{% endblock %}
+{% block page_subtitle %}Script Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('scripts.list_scripts') }}" class="text-decoration-none">
+                            <i class="bi bi-file-code me-2"></i>Scripts
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ script.name }}</li>
+                </ol>
+            </nav>
+
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">{{ script.name }}</h2>
+                    {% if script.description %}
+                    <p class="text-muted mb-0">{{ script.description }}</p>
+                    {% endif %}
+                </div>
+                <div class="btn-group" role="group">
+                    <a href="{{ url_for('scripts.edit_script', script_id=script.id) }}" class="btn btn-warning">
+                        <i class="bi bi-pencil me-2"></i>Edit
+                    </a>
+                    <a href="{{ url_for('scripts.list_scripts') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Back
+                    </a>
+                </div>
+            </div>
+
+            <!-- Script Info Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3 mb-3">
+                    <div class="card border-primary h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-file-earmark-code text-primary mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">Script Type</h6>
+                            <span class="badge bg-secondary">{{ script.script_type.upper() }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-success h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-archive text-success mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">File Size</h6>
+                            <p class="card-text h6 mb-0 fw-bold">{{ (script.file_size / 1024)|round(1) }} KB</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-info h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-calendar text-info mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">Created</h6>
+                            <p class="card-text mb-1 fw-bold">{{ script.created_at.strftime('%d/%m/%Y') }}</p>
+                            <small class="text-muted">{{ script.created_at.strftime('%H:%M') }}</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-warning h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <i class="bi bi-check-circle text-success mb-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="card-title mb-2">Status</h6>
+                            <span class="badge bg-success">Active</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Script Content -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-code-slash me-2"></i>
+                        {{ script.name }}.{{ script.script_type }}
+                    </h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <form method="POST" action="{{ url_for('scripts.execute_script', script_id=script.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-play me-1"></i>Execute
+                            </button>
+                        </form>
+                        <a href="{{ url_for('scripts.download_script', script_id=script.id) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i>Download
+                        </a>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="copyToClipboard()">
+                            <i class="bi bi-clipboard me-1"></i>Copy
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <pre class="bg-dark text-light p-3 mb-0" style="max-height: 500px; overflow-y: auto;"><code id="scriptContent">{{ content }}</code></pre>
+                </div>
+            </div>
+
+            <!-- Recent Executions -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>
+                        Recent Executions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center py-4">
+                        <i class="bi bi-clipboard-data text-muted mb-3" style="font-size: 3rem;"></i>
+                        <h6 class="text-muted">No executions yet</h6>
+                        <p class="text-muted mb-3">This script hasn't been executed recently.</p>
+                        <form method="POST" action="{{ url_for('scripts.execute_script', script_id=script.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-play me-2"></i>Execute Now
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToClipboard() {
+    const codeContent = document.getElementById('scriptContent').textContent;
+    navigator.clipboard.writeText(codeContent).then(function() {
+        // Show success feedback
+        const button = event.target.closest('button');
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+        button.classList.remove('btn-outline-info');
+        button.classList.add('btn-success');
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-info');
+        }, 2000);
+    }).catch(function() {
+        alert('Failed to copy to clipboard');
+    });
+}
+</script>
+{% endblock %}
