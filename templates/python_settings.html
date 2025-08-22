@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block page_title %}Python Settings{% endblock %}
+{% block page_subtitle %}Configure Python interpreter and virtual environment{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb Navigation -->
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+            <a href="{{ url_for('main.settings') }}" class="text-decoration-none">
+                <i class="bi bi-gear me-2"></i>Settings
+            </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">Python Settings</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <!-- Main Configuration -->
+    <div class="col-lg-8 mb-4">
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-4">
+                <div class="bg-warning bg-opacity-10 p-3 rounded-circle me-3">
+                    <i class="bi bi-python text-warning fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-semibold">Python Configuration</h5>
+                    <p class="text-muted mb-0 small">Configure which Python interpreter to use for script execution</p>
+                </div>
+            </div>
+
+            <form method="POST">
+                <!-- Python Executable Section -->
+                <div class="mb-4">
+                    <label for="python_executable" class="form-label fw-medium">
+                        <i class="bi bi-file-earmark-code me-2"></i>Python Executable
+                    </label>
+                    
+                    {% if available_interpreters %}
+                    <!-- Detected Interpreters -->
+                    <div class="mb-3">
+                        <label for="interpreter_select" class="form-label small text-muted">
+                            <i class="bi bi-search me-1"></i>Detected Interpreters
+                        </label>
+                        <select class="form-select" id="interpreter_select" onchange="selectInterpreter()">
+                            <option value="">Choose a detected interpreter...</option>
+                            {% for interp in available_interpreters %}
+                            <option value="{{ interp.path }}" 
+                                    {% if interp.path == python_executable %}selected{% endif %}>
+                                {{ interp.display }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Manual Path Input -->
+                    <input type="text" class="form-control code-input" id="python_executable" 
+                           name="python_executable" value="{{ python_executable }}"
+                           placeholder="python3 or /usr/bin/python3">
+                    <div class="form-text">
+                        {% if available_interpreters %}
+                        Choose from detected interpreters above or enter a custom path below.
+                        {% else %}
+                        Path to Python executable. Use 'python3' for system default or full path like '/usr/bin/python3'
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Virtual Environment Section -->
+                <div class="mb-4">
+                    <label for="python_env" class="form-label fw-medium">
+                        <i class="bi bi-folder me-2"></i>Virtual Environment
+                        <span class="badge bg-secondary-subtle text-secondary ms-2">Optional</span>
+                    </label>
+                    <input type="text" class="form-control code-input" id="python_env" 
+                           name="python_env" value="{{ python_env }}"
+                           placeholder="/path/to/venv or leave empty">
+                    <div class="form-text">
+                        Path to virtual environment directory. Leave empty to use system Python.
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-2"></i>Save Settings
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="testConfiguration()">
+                        <i class="bi bi-play-circle me-2"></i>Test Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- Examples Card -->
+        <div class="modern-card mb-4">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-info bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-lightbulb text-info"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">Examples</h6>
+            </div>
+
+            <div class="space-y-3">
+                <div class="mb-3">
+                    <div class="fw-medium small mb-1">System Python:</div>
+                    <code class="d-block p-2 bg-light rounded small">python3</code>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="fw-medium small mb-1">Specific Version:</div>
+                    <code class="d-block p-2 bg-light rounded small">/usr/bin/python3.9</code>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="fw-medium small mb-1">Anaconda:</div>
+                    <code class="d-block p-2 bg-light rounded small">/opt/anaconda3/bin/python</code>
+                </div>
+                
+                <div class="mb-0">
+                    <div class="fw-medium small mb-1">Virtual Environment:</div>
+                    <code class="d-block p-2 bg-light rounded small">/home/user/myenv</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Results Card -->
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-success bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-check-circle text-success"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">Test Results</h6>
+            </div>
+            
+            <div id="test-result" class="p-3 bg-light rounded text-center">
+                <div class="text-muted">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Click "Test Configuration" to verify settings
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .code-input {
+        font-family: 'Monaco', 'SF Mono', 'Cascadia Code', 'Roboto Mono', 'Courier New', monospace;
+        font-size: 0.875rem;
+    }
+    
+    .modern-card {
+        transition: all 0.3s ease;
+    }
+    
+    .modern-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn {
+        transition: all 0.2s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+    }
+    
+    code {
+        color: var(--foreground);
+        background-color: var(--muted);
+    }
+    
+    .bg-light {
+        background-color: var(--muted) !important;
+    }
+    
+    .form-control:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 0.25rem rgba(var(--primary-rgb), 0.25);
+    }
+    
+    .form-select:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 0.25rem rgba(var(--primary-rgb), 0.25);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function selectInterpreter() {
+        const select = document.getElementById('interpreter_select');
+        const input = document.getElementById('python_executable');
+        if (select.value) {
+            input.value = select.value;
+        }
+    }
+    
+    function testConfiguration() {
+        const pythonExec = document.getElementById('python_executable').value;
+        const pythonEnv = document.getElementById('python_env').value;
+        const resultDiv = document.getElementById('test-result');
+        
+        // Show loading state
+        resultDiv.innerHTML = `
+            <div class="text-primary">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                Testing configuration...
+            </div>
+        `;
+        
+        fetch('/api/terminal/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: 'python --version' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.returncode === 0) {
+                resultDiv.innerHTML = `
+                    <div class="text-success">
+                        <div class="d-flex align-items-center justify-content-center mb-2">
+                            <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+                            <div class="fw-semibold">Configuration OK</div>
+                        </div>
+                        <div class="small">
+                            <code>${data.stdout.trim()}</code>
+                        </div>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="text-danger">
+                        <div class="d-flex align-items-center justify-content-center mb-2">
+                            <i class="bi bi-x-circle-fill me-2 fs-4"></i>
+                            <div class="fw-semibold">Configuration Error</div>
+                        </div>
+                        <div class="small">
+                            <code>${data.stderr || data.error}</code>
+                        </div>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            resultDiv.innerHTML = `
+                <div class="text-danger">
+                    <div class="d-flex align-items-center justify-content-center mb-2">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+                        <div class="fw-semibold">Test Failed</div>
+                    </div>
+                    <div class="small">
+                        <code>${error.message}</code>
+                    </div>
+                </div>
+            `;
+        });
+    }
+</script>
+{% endblock %}

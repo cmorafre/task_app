@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block page_title %}Execution Details{% endblock %}
+{% block page_subtitle %}Detailed execution information{% endblock %}
+
+{% block content %}
+<!-- Execution Details Card -->
+<div class="row">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <h5 class="fw-semibold mb-1">{{ execution.script.name if execution.script else 'Unknown Script' }}</h5>
+                    <p class="text-muted mb-0">Execution ID: {{ execution.id }}</p>
+                </div>
+                <span class="badge bg-{{ execution.status_color }}-subtle text-{{ execution.status_color }}">
+                    {{ execution.status.title() }}
+                </span>
+            </div>
+
+            <!-- Execution Info -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="bg-light p-3 rounded">
+                        <div class="fw-medium small text-muted mb-1">Started</div>
+                        <div class="fw-semibold">{{ execution.started_at.strftime('%d/%m/%Y %H:%M:%S') if execution.started_at else 'N/A' }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="bg-light p-3 rounded">
+                        <div class="fw-medium small text-muted mb-1">Duration</div>
+                        <div class="fw-semibold">{{ execution.formatted_duration if execution.formatted_duration else 'N/A' }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="bg-light p-3 rounded">
+                        <div class="fw-medium small text-muted mb-1">Exit Code</div>
+                        <div class="fw-semibold">{{ execution.exit_code if execution.exit_code is not none else 'N/A' }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="bg-light p-3 rounded">
+                        <div class="fw-medium small text-muted mb-1">Trigger</div>
+                        <div class="fw-semibold">{{ execution.trigger_type.title() if execution.trigger_type else 'Manual' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Output Section -->
+            {% if execution.stdout %}
+            <div class="mb-4">
+                <h6 class="fw-semibold mb-2">
+                    <i class="bi bi-terminal me-2"></i>Standard Output
+                </h6>
+                <div class="log-output">{{ execution.stdout }}</div>
+            </div>
+            {% endif %}
+
+            <!-- Error Section -->
+            {% if execution.stderr %}
+            <div class="mb-4">
+                <h6 class="fw-semibold mb-2 text-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Standard Error
+                </h6>
+                <div class="log-output error-output">{{ execution.stderr }}</div>
+            </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('logs.list_logs') }}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Logs
+                </a>
+                {% if execution.script %}
+                <a href="{{ url_for('view_script', script_id=execution.script.id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-file-code me-2"></i>View Script
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .log-output {
+        background-color: #2d3748;
+        color: #e2e8f0;
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', 'Courier New', monospace;
+        font-size: 0.875rem;
+        max-height: 400px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        line-height: 1.5;
+    }
+    
+    .error-output {
+        background-color: #2d1b1b;
+        color: #fca5a5;
+        border: 1px solid #dc2626;
+    }
+    
+    .log-output::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .log-output::-webkit-scrollbar-track {
+        background: #4a5568;
+    }
+    
+    .log-output::-webkit-scrollbar-thumb {
+        background: #718096;
+        border-radius: 4px;
+    }
+    
+    .log-output::-webkit-scrollbar-thumb:hover {
+        background: #a0aec0;
+    }
+    
+    .bg-light {
+        background-color: hsl(210 40% 98%) !important;
+    }
+    
+    .modern-card {
+        transition: all 0.3s ease;
+    }
+    
+    .btn {
+        transition: all 0.2s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+    }
+</style>
+{% endblock %}

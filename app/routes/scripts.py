@@ -12,6 +12,7 @@ from app.models.script import Script
 from app.models.execution import Execution, ExecutionTrigger
 from app.services.script_executor import script_executor
 from app.models import db
+# UI Version Manager removed - using V2 templates only
 
 scripts_bp = Blueprint('scripts', __name__)
 
@@ -25,30 +26,69 @@ def allowed_file(filename):
 @login_required
 def index():
     """Scripts list page"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import desc, asc, func
     
     # Get filters from query parameters
     search = request.args.get('search', '').strip()
     script_type = request.args.get('type', '')
-    status = request.args.get('status', '')
+    size_filter = request.args.get('size', '')
+    date_filter = request.args.get('date', '')
+    sort_by = request.args.get('sort', 'updated')
     
     # Build query
     query = Script.query.filter_by(user_id=current_user.id, is_active=True)
     
+    # Search filter
     if search:
         query = query.filter(Script.name.contains(search))
     
+    # Type filter
     if script_type and script_type in ALLOWED_EXTENSIONS:
         query = query.filter_by(script_type=script_type)
     
-    # TODO: Add status filtering based on last execution
+    # Size filter
+    if size_filter:
+        if size_filter == 'small':
+            query = query.filter(Script.file_size < 1024)  # < 1KB
+        elif size_filter == 'medium':
+            query = query.filter(Script.file_size >= 1024, Script.file_size <= 10240)  # 1KB - 10KB
+        elif size_filter == 'large':
+            query = query.filter(Script.file_size > 10240)  # > 10KB
     
-    scripts = query.order_by(Script.updated_at.desc()).all()
+    # Date filter
+    if date_filter:
+        now = datetime.now()
+        if date_filter == 'today':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            query = query.filter(Script.updated_at >= start_date)
+        elif date_filter == 'week':
+            start_date = now - timedelta(days=7)
+            query = query.filter(Script.updated_at >= start_date)
+        elif date_filter == 'month':
+            start_date = now - timedelta(days=30)
+            query = query.filter(Script.updated_at >= start_date)
     
-    return render_template('scripts/index.html', 
+    # Sorting
+    if sort_by == 'name':
+        query = query.order_by(asc(Script.name))
+    elif sort_by == 'size':
+        query = query.order_by(desc(Script.file_size))
+    elif sort_by == 'executions':
+        # Join with executions to count
+        query = query.outerjoin(Execution).group_by(Script.id).order_by(desc(func.count(Execution.id)))
+    else:  # default to 'updated'
+        query = query.order_by(desc(Script.updated_at))
+    
+    scripts = query.all()
+    
+    return render_template('scripts.html', 
                          scripts=scripts,
                          search=search,
                          script_type=script_type,
-                         status=status)
+                         size_filter=size_filter,
+                         date_filter=date_filter,
+                         sort_by=sort_by)
 
 @scripts_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
@@ -128,7 +168,7 @@ def upload():
             flash(f'Error uploading script: {str(e)}', 'error')
             return redirect(request.url)
     
-    return render_template('scripts/upload.html')
+    return render_template('upload.html')
 
 @scripts_bp.route('/<int:id>')
 @login_required
@@ -142,7 +182,7 @@ def view(id):
         .order_by(Execution.started_at.desc())\
         .limit(10).all()
     
-    return render_template('scripts/view.html', 
+    return render_template('view_script.html', 
                          script=script,
                          recent_executions=recent_executions)
 
@@ -205,7 +245,7 @@ def edit(id):
         flash(f'Script "{name}" updated successfully!', 'success')
         return redirect(url_for('scripts.view', id=script.id))
     
-    return render_template('scripts/edit.html', script=script)
+    return render_template('edit_script.html', script=script)
 
 @scripts_bp.route('/<int:id>/delete', methods=['POST'])
 @login_required
