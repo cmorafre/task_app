@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from typing import Optional, Dict, Any, Tuple
 import time
 
-from app.models.datasource import DataSource
+# DataSource model is imported from the main application
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -22,13 +22,18 @@ class ConnectionManager:
         self.max_pool_size = 5
         self.pool_timeout = 30
         self.connection_timeout = 10
+        self._DataSource = None  # Will be set during app initialization
+    
+    def set_datasource_model(self, DataSource):
+        """Set the DataSource model class (called during app initialization)"""
+        self._DataSource = DataSource
         
     def get_engine(self, datasource_id: int):
         """Get SQLAlchemy engine for datasource (with connection pooling)"""
         if datasource_id in self._connection_pools:
             return self._connection_pools[datasource_id]
         
-        datasource = DataSource.query.get(datasource_id)
+        datasource = self._DataSource.query.get(datasource_id)
         if not datasource:
             raise ValueError(f"DataSource {datasource_id} not found")
         
@@ -36,6 +41,12 @@ class ConnectionManager:
             raise ValueError(f"DataSource {datasource.name} is not active")
         
         try:
+            # Configure connection args based on database type
+            if datasource.db_type == 'postgres':
+                connect_args = {'connect_timeout': self.connection_timeout}
+            else:  # oracle
+                connect_args = {'timeout': self.connection_timeout}
+            
             # Create engine with connection pooling
             engine = create_engine(
                 datasource.connection_string,
@@ -43,10 +54,7 @@ class ConnectionManager:
                 pool_size=self.max_pool_size,
                 max_overflow=10,
                 pool_timeout=self.pool_timeout,
-                connect_args={
-                    'timeout': self.connection_timeout,
-                    'check_same_thread': False  # For SQLite compatibility if needed
-                },
+                connect_args=connect_args,
                 echo=False  # Set to True for SQL debugging
             )
             
@@ -151,7 +159,7 @@ class ConnectionManager:
     def test_connection(self, datasource_id: int) -> Tuple[bool, str]:
         """Test connection to datasource"""
         try:
-            datasource = DataSource.query.get(datasource_id)
+            datasource = self._DataSource.query.get(datasource_id)
             if not datasource:
                 return False, "DataSource not found"
             
@@ -223,7 +231,7 @@ class ConnectionManager:
     def get_table_info(self, datasource_id: int, table_name: str) -> Dict[str, Any]:
         """Get table structure information"""
         try:
-            datasource = DataSource.query.get(datasource_id)
+            datasource = self._DataSource.query.get(datasource_id)
             if not datasource:
                 raise ValueError(f"DataSource {datasource_id} not found")
             

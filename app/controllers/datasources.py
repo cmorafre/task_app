@@ -116,9 +116,9 @@ def init_datasources_blueprint(app, db, DataSource, apply_user_data_filter):
                 port=port,
                 database=database,
                 username=username,
-                password=password,  # Will be encrypted in the model
                 user_id=current_user.id
             )
+            datasource.set_password(password)  # Will be encrypted in the model
             
             db.session.add(datasource)
             db.session.commit()
@@ -267,7 +267,7 @@ def init_datasources_blueprint(app, db, DataSource, apply_user_data_filter):
             # Get form data
             db_type = request.json.get('db_type', '').strip()
             host = request.json.get('host', '').strip()
-            port = request.json.get('port', type=int)
+            port = int(request.json.get('port'))
             database = request.json.get('database', '').strip()
             username = request.json.get('username', '').strip()
             password = request.json.get('password', '').strip()
@@ -288,16 +288,22 @@ def init_datasources_blueprint(app, db, DataSource, apply_user_data_filter):
                 port=port,
                 database=database,
                 username=username,
-                password=password,
                 user_id=current_user.id
             )
+            temp_datasource.set_password(password)
             
             # Test connection using connection string
             from sqlalchemy import create_engine, text
             
+            # Configure connection args based on database type
+            if db_type == 'postgres':
+                connect_args = {'connect_timeout': 10}
+            else:  # oracle
+                connect_args = {'timeout': 10}
+            
             engine = create_engine(
                 temp_datasource.connection_string,
-                connect_args={'timeout': 10}
+                connect_args=connect_args
             )
             
             with engine.connect() as conn:

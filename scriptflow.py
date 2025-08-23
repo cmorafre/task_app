@@ -456,7 +456,14 @@ class DataSource(db.Model):
         """Test database connection"""
         try:
             from sqlalchemy import create_engine, text
-            engine = create_engine(self.connection_string, connect_args={'timeout': 10})
+            
+            # Configure connection args based on database type
+            if self.db_type == 'postgres':
+                connect_args = {'connect_timeout': 10}
+            else:  # oracle
+                connect_args = {'timeout': 10}
+            
+            engine = create_engine(self.connection_string, connect_args=connect_args)
             
             with engine.connect() as conn:
                 if self.db_type == 'oracle':
@@ -469,6 +476,25 @@ class DataSource(db.Model):
                 
         except Exception as e:
             return False, str(e)
+    
+    # Relationship properties - added after Integration model definition
+    @property
+    def integrations_as_source(self):
+        """Get integrations where this datasource is used as source"""
+        # Import here to avoid circular imports
+        Integration = globals().get('Integration')
+        if Integration:
+            return Integration.query.filter_by(source_id=self.id).all()
+        return []
+    
+    @property
+    def integrations_as_target(self):
+        """Get integrations where this datasource is used as target"""
+        # Import here to avoid circular imports
+        Integration = globals().get('Integration')
+        if Integration:
+            return Integration.query.filter_by(target_id=self.id).all()
+        return []
 
 class Integration(db.Model):
     """Integration model for managing ETL jobs (Extract-Transform-Load)"""
@@ -989,6 +1015,10 @@ def register_blueprints():
     # NEW: Register Integration feature blueprints (NON-BREAKING ADDITION)
     app.register_blueprint(integrations_bp)
     app.register_blueprint(datasources_bp)
+    
+    # Initialize connection manager with DataSource model
+    from app.services.connection_manager import connection_manager
+    connection_manager.set_datasource_model(DataSource)
     
     print("✅ All blueprints registered successfully (including Integration feature)")
 

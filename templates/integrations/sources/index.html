@@ -224,7 +224,7 @@
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <button class="btn btn-outline-success btn-sm" 
-                                            onclick="testConnection({{ ds.id }}, '{{ ds.name }}')"
+                                            onclick="testConnectionAndUpdateStatus({{ ds.id }}, '{{ ds.name }}')"
                                             title="Test Connection">
                                         <i class="bi bi-wifi"></i>
                                     </button>
@@ -306,6 +306,65 @@
         });
     }
 
+    function testConnectionAndUpdateStatus(datasourceId, datasourceName) {
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+        
+        // Find and update the status column
+        const statusEl = document.querySelector(`.connection-status[data-datasource-id="${datasourceId}"]`);
+        if (statusEl) {
+            statusEl.innerHTML = `
+                <span class="spinner-border spinner-border-sm text-muted me-1"></span>
+                <span class="text-muted small">Testing...</span>
+            `;
+        }
+
+        fetch(`/integrations/sources/${datasourceId}/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', `Connection to "${datasourceName}" successful!`);
+                // Update status column to success
+                if (statusEl) {
+                    statusEl.innerHTML = `
+                        <i class="bi bi-check-circle text-success me-1"></i>
+                        <span class="text-success small">Connected</span>
+                    `;
+                }
+            } else {
+                showAlert('danger', `Connection to "${datasourceName}" failed: ${data.message}`);
+                // Update status column to failed
+                if (statusEl) {
+                    statusEl.innerHTML = `
+                        <i class="bi bi-x-circle text-danger me-1"></i>
+                        <span class="text-danger small">Connection Failed</span>
+                    `;
+                }
+            }
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        })
+        .catch(error => {
+            showAlert('danger', `Failed to test connection: ${error.message}`);
+            // Update status column to error
+            if (statusEl) {
+                statusEl.innerHTML = `
+                    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                    <span class="text-warning small">Test Failed</span>
+                `;
+            }
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
+    }
+
     function deleteDataSource(datasourceId, datasourceName, usageCount) {
         if (usageCount > 0) {
             showAlert('warning', `Cannot delete "${datasourceName}" - it is being used by ${usageCount} integration(s)`);
@@ -339,8 +398,10 @@
 
     // Auto-test connections on page load
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('Auto-testing connections on page load...');
         document.querySelectorAll('.connection-status[data-loading="true"]').forEach(statusEl => {
             const datasourceId = statusEl.getAttribute('data-datasource-id');
+            console.log(`Testing connection for datasource ${datasourceId}`);
             
             fetch(`/integrations/sources/${datasourceId}/test`, {
                 method: 'POST',

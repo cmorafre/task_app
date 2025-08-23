@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ datasource.name }}{% endblock %}
+{% block page_subtitle %}Data source connection details{% endblock %}
+
+{% block content %}
+<!-- Navigation Breadcrumb -->
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('integrations.list_integrations') }}" class="text-decoration-none">
+                        <i class="bi bi-diagram-3 me-1"></i>Integrations
+                    </a>
+                </li>
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('datasources.list_datasources') }}" class="text-decoration-none">
+                        <i class="bi bi-database me-1"></i>Data Sources
+                    </a>
+                </li>
+                <li class="breadcrumb-item active">{{ datasource.name }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Data Source Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="mb-2 fw-semibold">
+                        <i class="bi bi-{{ 'server' if datasource.db_type == 'oracle' else 'cloud' }} me-2"></i>
+                        {{ datasource.name }}
+                    </h5>
+                    {% if datasource.description %}
+                    <p class="text-muted mb-3">{{ datasource.description }}</p>
+                    {% endif %}
+                    <div class="d-flex gap-3">
+                        <span class="badge bg-{{ 'warning' if datasource.db_type == 'oracle' else 'info' }} text-white fs-6 px-3 py-2">
+                            <i class="bi bi-{{ 'server' if datasource.db_type == 'oracle' else 'cloud' }} me-1"></i>
+                            {{ datasource.db_type|upper }}
+                        </span>
+                        <span class="badge bg-success text-white fs-6 px-3 py-2">
+                            <i class="bi bi-check-circle me-1"></i>Active
+                        </span>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success" onclick="testConnection()">
+                        <i class="bi bi-wifi me-1"></i>Test Connection
+                    </button>
+                    <a href="{{ url_for('datasources.edit_datasource', datasource_id=datasource.id) }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Connection Test Result -->
+            <div id="testResult" class="mt-3" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Connection Details & Usage -->
+<div class="row">
+    <!-- Connection Details -->
+    <div class="col-md-8">
+        <div class="modern-card mb-4">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-server me-2"></i>Connection Details
+            </h6>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Host</label>
+                        <div class="fw-medium">{{ datasource.host }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Database</label>
+                        <div class="fw-medium">{{ datasource.database }}</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Port</label>
+                        <div class="fw-medium">{{ datasource.port }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Username</label>
+                        <div class="fw-medium">{{ datasource.username }}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="border-top pt-3">
+                <label class="form-label small fw-medium text-muted">Connection String Preview</label>
+                <div class="bg-dark rounded p-3">
+                    <code class="text-light small">{{ datasource.display_connection }}</code>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Usage Information -->
+        <div class="modern-card">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-diagram-3 me-2"></i>Integration Usage
+            </h6>
+            
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="text-center p-3 bg-primary bg-opacity-10 rounded">
+                        <h4 class="mb-1 fw-bold text-primary">{{ total_usage }}</h4>
+                        <small class="text-muted">Total Usage</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center p-3 bg-success bg-opacity-10 rounded">
+                        <h4 class="mb-1 fw-bold text-success">{{ integrations_as_source }}</h4>
+                        <small class="text-muted">As Source</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center p-3 bg-info bg-opacity-10 rounded">
+                        <h4 class="mb-1 fw-bold text-info">{{ integrations_as_target }}</h4>
+                        <small class="text-muted">As Target</small>
+                    </div>
+                </div>
+            </div>
+            
+            {% if total_usage > 0 %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                This data source is actively used by {{ total_usage }} integration(s). 
+                <a href="{{ url_for('integrations.list_integrations') }}" class="alert-link">
+                    View integrations →
+                </a>
+            </div>
+            {% else %}
+            <div class="alert alert-secondary">
+                <i class="bi bi-info-circle me-2"></i>
+                This data source is not currently used by any integrations.
+                <a href="{{ url_for('integrations.new_integration') }}" class="alert-link">
+                    Create integration →
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Sidebar Info -->
+    <div class="col-md-4">
+        <!-- Quick Info -->
+        <div class="modern-card mb-4">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-info-circle me-2"></i>Quick Info
+            </h6>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted small">Created</span>
+                    <span class="fw-medium small">{{ datasource.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted small">Last Updated</span>
+                    <span class="fw-medium small">{{ datasource.updated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted small">Database Type</span>
+                    <span class="fw-medium small">{{ datasource.db_type|upper }}</span>
+                </div>
+            </div>
+            <div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted small">Status</span>
+                    <span class="badge bg-success text-white">Active</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Database Help -->
+        <div class="modern-card">
+            <div class="d-flex align-items-center mb-3">
+                <div class="bg-{{ 'warning' if datasource.db_type == 'oracle' else 'info' }} bg-opacity-10 p-2 rounded-circle me-3">
+                    <i class="bi bi-{{ 'server' if datasource.db_type == 'oracle' else 'cloud' }} text-{{ 'warning' if datasource.db_type == 'oracle' else 'info' }}"></i>
+                </div>
+                <h6 class="mb-0 fw-semibold">{{ datasource.db_type|upper }} Info</h6>
+            </div>
+            
+            {% if datasource.db_type == 'oracle' %}
+            <div class="small text-muted">
+                <p><strong>Oracle Database</strong></p>
+                <ul class="mb-0">
+                    <li>Standard port: 1521</li>
+                    <li>Database field contains SID or Service Name</li>
+                    <li>Uses cx_oracle connector</li>
+                </ul>
+            </div>
+            {% else %}
+            <div class="small text-muted">
+                <p><strong>PostgreSQL Database</strong></p>
+                <ul class="mb-0">
+                    <li>Standard port: 5432</li>
+                    <li>Database field contains database name</li>
+                    <li>Uses psycopg2 connector</li>
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1 fw-semibold">Actions</h6>
+                    <p class="text-muted mb-0 small">Manage this data source</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('datasources.list_datasources') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i>Back to List
+                    </a>
+                    <a href="{{ url_for('datasources.edit_datasource', datasource_id=datasource.id) }}" 
+                       class="btn btn-primary">
+                        <i class="bi bi-pencil me-1"></i>Edit Data Source
+                    </a>
+                    {% if total_usage == 0 %}
+                    <button type="button" class="btn btn-outline-danger" 
+                            onclick="deleteDataSource()">
+                        <i class="bi bi-trash me-1"></i>Delete
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function testConnection() {
+        const btn = event.target;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+        btn.disabled = true;
+        
+        showTestResult('info', 'Testing connection...');
+
+        fetch(`/integrations/sources/{{ datasource.id }}/test`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showTestResult('success', '✅ Connection successful! Database is reachable.');
+            } else {
+                showTestResult('danger', `❌ Connection failed: ${data.message}`);
+            }
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        })
+        .catch(error => {
+            showTestResult('danger', `❌ Test failed: ${error.message}`);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        });
+    }
+
+    function deleteDataSource() {
+        if (!confirm('Delete data source "{{ datasource.name }}"? This action cannot be undone.')) {
+            return;
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/integrations/sources/{{ datasource.id }}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function showTestResult(type, message) {
+        const resultDiv = document.getElementById('testResult');
+        resultDiv.className = `alert alert-${type} mb-0`;
+        resultDiv.innerHTML = message;
+        resultDiv.style.display = 'block';
+        
+        // Auto-hide after 5 seconds for success messages
+        if (type === 'success') {
+            setTimeout(() => {
+                resultDiv.style.display = 'none';
+            }, 5000);
+        }
+    }
+</script>
+{% endblock %}
